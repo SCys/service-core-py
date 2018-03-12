@@ -72,6 +72,7 @@ class RequestHandler(tornado.web.RequestHandler):
             }
         }
         """
+        self.data = CustomDict()
         self.params = CustomDict()
         self.auth = CustomDict()
         self.version = LooseVersion('0.0.0')
@@ -83,6 +84,7 @@ class RequestHandler(tornado.web.RequestHandler):
             except Exception as e:
                 self.E('convert body to json failed:%s', e)
             else:
+                self.data.update(data)
                 self.auth.update(data.get('auth'))
                 self.params.update(data.get('params'))
                 self.version = LooseVersion(data.get('version', '0.0.0'))
