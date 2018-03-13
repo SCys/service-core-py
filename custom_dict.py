@@ -1,6 +1,5 @@
 
 from rapidjson import dumps, DM_ISO8601, DM_NAIVE_IS_UTC
-import uuid
 
 
 __all__ = ['CustomDict']

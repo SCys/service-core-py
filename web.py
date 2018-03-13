@@ -2,6 +2,7 @@
 helper module
 '''
 
+import uuid
 from distutils.version import LooseVersion
 
 import tornado.web
