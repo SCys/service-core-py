@@ -8,34 +8,34 @@ __all__ = ['CustomDict']
 
 class CustomDict(object):
 
-    _data: dict
+    __data__: dict
 
     def __init__(self, raw=None):
+        # setattr(self, '__data__', {})
+        self.__dict__['__data__'] = {}
+
         if isinstance(raw, dict):
-            self._data = raw
+            self.__data__.update(raw)
 
         elif isinstance(raw, CustomDict):
-            self._data = raw.data
-
-        else:
-            self._data = {}
+            self.__data__.update(raw.__data__)
 
     def __eq__(self, other):
         if isinstance(other, CustomDict):
-            return self._data == other._data
+            return self.__data__ == other.__data__
         elif isinstance(other, dict):
-            return self._data == other
+            return self.__data__ == other
 
         return False
 
     def __bool__(self):
-        return self._data.__bool__()
+        return self.__data__.__bool__()
 
     def __contains__(self, key):
-        return key in self._data
+        return key in self.__data__
 
     def __hasattr__(self, key):
-        return hasattr(self._data, key)
+        return hasattr(self.__data__, key)
 
     # Getter by name
     def __getitem__(self, name):
@@ -46,30 +46,24 @@ class CustomDict(object):
         return value
 
     def __getattr__(self, name):
-        if hasattr(super(), name):
-            return getattr(super(), name)
-
-        if name in self.__dict__:
-            return self.__dict__[name]
-
-        if name in self._data:
+        if name in self.__data__:
             return self.__getitem__(name)
 
-        return None
+        return super().__getattr__(name)
 
     # Setter by name with value
     def __setitem__(self, name, value):
         if isinstance(value, CustomDict):
-            self._data[name] = value._data
+            self.__data__[name] = value.__data__
         else:
-            self._data[name] = value
+            self.__data__[name] = value
 
     def __setattr__(self, name, value):
         self.__setitem__(name, value)
 
     def __delitem__(self, name):
-        if name in self._data:
-            del self._data
+        if name in self.__data__:
+            del self.__data__
 
     def __delattr__(self, name):
         self.__delattr__(name)
@@ -79,14 +73,14 @@ class CustomDict(object):
             pass
 
         elif isinstance(source, dict):
-            self._data.update(source)
+            self.__data__.update(source)
 
         elif isinstance(source, CustomDict):
-            self._data.update(source._data)
+            self.__data__.update(source.__data__)
 
     def keys(self):
-        return self._data.keys()
+        return self.__data__.keys()
 
     def dumps(self):
-        return dumps(self.__data__, datetime_mode=DM_ISO8601 | DM_NAIVE_IS_UTC)
+        return dumps(self.___data____, datetime_mode=DM_ISO8601 | DM_NAIVE_IS_UTC)
 
