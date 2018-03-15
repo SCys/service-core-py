@@ -3,6 +3,8 @@ import os
 
 import tornado.options
 import tornado.web
+import tornado.httpserver
+import signal
 
 from .log import A, I
 from .options import options
@@ -14,6 +16,8 @@ class Application(tornado.web.Application):
     '''
     overlay default Application, add more helper settings or options
     '''
+
+    server: tornado.httpserver.HTTPServer
 
     def __init__(self, *args, **kwargs):
         self.load_config()
@@ -34,14 +38,28 @@ class Application(tornado.web.Application):
 
     def start(self):
         I('service on %s:%d version %s', options.address, options.port, options.version)
-        self.listen(options.port, options.address, xheaders=True)
 
-        asyncio.get_event_loop().run_forever()
+        # listen on signal
+        signal.signal(signal.SIGINT, self.stop)
+        signal.signal(signal.SIGTERM, self.stop)
+
+        self.server = self.listen(options.port, options.address, xheaders=True)
+        self.server.start(0)
+
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_forever()
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
 
     def stop(self):
+        self.server.stop()
+
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
+        loop.stop()
+
+        exit(0)  # exit with zero
 
     def log_request(self, handler):
         '''overwrite parent log handler''',
