@@ -1,10 +1,10 @@
 import asyncio
 import os
+import signal
 
+import tornado.httpserver
 import tornado.options
 import tornado.web
-import tornado.httpserver
-import signal
 
 from .log import A, I
 from .options import options
@@ -44,7 +44,12 @@ class Application(tornado.web.Application):
         signal.signal(signal.SIGTERM, self.stop)
 
         self.server = self.listen(options.port, options.address, xheaders=True)
-        self.server.start(0)
+
+        # support windows not fork env
+        if os.name == 'nt':
+            self.server.start(1)
+        else:
+            self.server.start(1)
 
         loop = asyncio.get_event_loop()
         try:
@@ -54,6 +59,7 @@ class Application(tornado.web.Application):
             loop.close()
 
     def stop(self):
+        I('service on %s:%d version %s stoping', options.address, options.port, options.version)
         self.server.stop()
 
         loop = asyncio.get_event_loop()
