@@ -48,7 +48,10 @@ class CustomDict(object):
         if name in self.__data__:
             return self.__getitem__(name)
 
-        return super().__getattr__(name)
+        if hasattr(super(), name):
+            return getattr(super(), name)
+
+        return None
 
     # Setter by name with value
     def __setitem__(self, name, value):
