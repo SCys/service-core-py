@@ -2,7 +2,7 @@
 helper module
 '''
 
-import uuid
+import xid
 from distutils.version import LooseVersion
 
 import tornado.web
@@ -14,6 +14,7 @@ from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 from .custom_dict import CustomDict
 from .log import D, E, I, W
 from .options import options
+from .auth.user import User
 
 __all__ = ['JSONError', 'RequestHandler']
 
@@ -36,18 +37,18 @@ class RequestHandler(tornado.web.RequestHandler):
     overlay default RequestHandler
     '''
 
-    auth = None
-    params = None
+    data: CustomDict
+    auth: CustomDict
+    params: CustomDict
 
-    _db = None
-
-    id = None
+    id: str
+    db: asyncpg.pool.Pool
 
     def initialize(self):
         self.id = Xid().string()
-        self._db = None
         self.auth = CustomDict({})
         self.params = CustomDict({})
+        self.db = None
 
     def I(self, msg, *args, **kwargs):
         I(f'[{self.id}]{msg}', *args, **kwargs)
@@ -79,7 +80,7 @@ class RequestHandler(tornado.web.RequestHandler):
         self.version = LooseVersion('0.0.0')
 
         # dump request json text body to json object
-        if self.request.method in ('POST', 'PUT'):
+        if self.request.method in ('POST', 'PUT') and len(self.request.body) > 0:
             try:
                 data = loads(self.request.body, datetime_mode=DM_ISO8601)
             except Exception as e:
@@ -89,6 +90,14 @@ class RequestHandler(tornado.web.RequestHandler):
                 self.auth.update(data.get('auth'))
                 self.params.update(data.get('params'))
                 self.version = LooseVersion(data.get('version', '0.0.0'))
+
+        if self.db is None:
+            self.db = await asyncpg.create_pool(
+                options.db,
+                max_size=60,
+                command_timeout=60,
+            )
+            self.D(f'[Handler]database prepared')
 
     def write(self, chunk):
 
@@ -152,11 +161,33 @@ class RequestHandler(tornado.web.RequestHandler):
 
         return params
 
-    async def db(self):
-        if self._db is None:
-            self._db = await asyncpg.create_pool(
-                options.db,
-                max_size=60,
-                command_timeout=60,)
 
-        return self._db
+class AuthRequestHandler(RequestHandler):
+
+    user: User
+
+    async def prepare(self):
+        await super().prepare()
+
+        self.user = None
+        token = self.auth.token
+        if token is None:
+            return
+
+        user = await User.find(code=token, code_type='token')
+        if user is None:
+            return
+
+        if user.removed:
+            self.E(f'[Handler]{user} is removed')
+            return
+
+        if not user.actived:
+            self.E(f'[Handler]{user} is not actived')
+            return
+
+        if user.disabled:
+            self.E(f'[Handler]{user} is disabled')
+            return
+
+        self.user = user
