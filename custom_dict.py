@@ -85,4 +85,3 @@ class CustomDict(object):
 
     def dumps(self):
         return dumps(self.___data____, datetime_mode=DM_ISO8601 | DM_NAIVE_IS_UTC)
-

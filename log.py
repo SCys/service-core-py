@@ -37,7 +37,7 @@ log_access_handler.setFormatter(formatter_default)
 log_access.addHandler(log_access_handler)
 
 
-def I(msg, *args, **kwargs):
+def I(msg, *args, **kwargs):  # noqa
     log_main.info(msg, *args, **kwargs)
 
 

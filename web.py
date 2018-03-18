@@ -2,7 +2,6 @@
 helper module
 '''
 
-import xid
 from distutils.version import LooseVersion
 
 import tornado.web
@@ -50,7 +49,7 @@ class RequestHandler(tornado.web.RequestHandler):
         self.params = CustomDict({})
         self.db = None
 
-    def I(self, msg, *args, **kwargs):
+    def I(self, msg, *args, **kwargs):  # noqa
         I(f'[{self.id}]{msg}', *args, **kwargs)
 
     def E(self, msg, *args, **kwargs):
