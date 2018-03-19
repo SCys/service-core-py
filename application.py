@@ -54,6 +54,8 @@ class Application(tornado.web.Application):
         loop = asyncio.get_event_loop()
         try:
             loop.run_forever()
+        except KeyboardInterrupt:
+            self.stop()
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
