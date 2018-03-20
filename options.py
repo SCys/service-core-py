@@ -1,5 +1,5 @@
 
-from tornado.options import define, options
+from tornado.options import define, options # noqa
 
 # default config path
 define('config', default='config.ini', help='main options file path')
