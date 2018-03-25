@@ -2,6 +2,7 @@ import asyncio
 import os
 import signal
 
+import asyncpg
 import tornado.httpserver
 import tornado.options
 import tornado.web
@@ -18,9 +19,12 @@ class Application(tornado.web.Application):
     '''
 
     server: tornado.httpserver.HTTPServer
+    db: asyncpg.pool.Pool
 
     def __init__(self, *args, **kwargs):
         self.load_config()
+
+        self.db = None
 
         super().__init__(*args, **kwargs)
 

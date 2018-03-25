@@ -90,13 +90,18 @@ class RequestHandler(tornado.web.RequestHandler):
                 self.params.update(data.get('params'))
                 self.version = LooseVersion(data.get('version', '0.0.0'))
 
-        if self.db is None:
-            self.db = await asyncpg.create_pool(
+        await self.prepare_database()
+
+    async def prepare_database(self):
+        if self.application.db is None and options.db:
+            self.application.db = await asyncpg.create_pool(
                 options.db,
-                max_size=60,
+                max_size=30,
                 command_timeout=60,
             )
             self.D(f'[Handler]database prepared')
+
+        self.db = self.application.db
 
     def write(self, chunk):
 

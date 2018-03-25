@@ -2,7 +2,7 @@ import xid
 import asyncpg
 from datetime import datetime, timezone
 
-from rapidjson import dumps, DM_ISO8601
+from rapidjson import dumps, DM_ISO8601, loads
 
 from ..log import E, I
 from .user_code import UserCode
@@ -11,7 +11,7 @@ from .user_history import UserHistory
 
 class User(object):
     '''
-    user history:
+    User data struct
 
     ```python
     {
@@ -26,6 +26,27 @@ class User(object):
         'ts_addition': timestamp with timezone,
         'ts_modify': timestamp with timezone,
     }
+    ```
+
+    ```sql
+    create table users (
+        id varchar(120) primary key,
+        name varchar(120),
+        email varchar(120),
+        phone_primary varchar(120),
+        info jsonb default '{}'::jsonb,
+        actived boolean default false,
+        disabled boolean default false,
+        removed boolean default false,
+        ts_addition timestamp with time zone default now(),
+        ts_modify timestamp with time zone default now()
+    );
+
+    create unique index idx_users_name on users(name);
+    create unique index idx_users_email on users(email);
+    create unique index idx_users_phone_primary on users(phone_primary);
+
+    create index idx_users_ts_addition on users(ts_addition);
     ```
     '''
 
@@ -48,7 +69,9 @@ class User(object):
         self.name = row.get('name', '')
         self.email = row.get('email', None)
         self.phone_primary = row.get('phone_primary', None)
-        self.info = row.get('info', {})
+
+        info = row.get('info', '{}')
+        self.info = loads(info, datetime_mode=DM_ISO8601)
 
         self.actived = row.get('actived', False)
         self.disabled = row.get('disabled', False)
@@ -80,54 +103,65 @@ class User(object):
 
     async def create(self, conn: asyncpg.Connection, source: str):
         await conn.execute(
-            '''insert users(id, name, email, phone, info, actived, disabled, removed, ts_addition, ts_modify) values(
+            '''insert into users(id, name, email, phone_primary, info, actived, disabled, removed, ts_addition, ts_modify) values(
                 $1, $2, $3, $4, $5, false, false, false, now(), now()
             )''', self.id, self.name, self.email, self.phone_primary, dumps(self.info, datetime_mode=DM_ISO8601))
 
         history = UserHistory({'id_user': self.id, 'action': 'created', 'source': source})
-        await history.add()
+        await history.add(conn)
         I('[User.create]%s created', self)
+
+    async def add_code(self, conn: asyncpg.Connection, code_type, code) -> bool:
+        uc = UserCode({
+            'id_user': self.id,
+            'code': code,
+            'code_type': code_type,
+            'removed': False,
+            'tp_expired': datetime(2999, 1, 1, tzinfo=timezone.utc),
+        })
+        await uc.create(conn)
 
     @staticmethod
     async def find(conn: asyncpg.Connection, name=None, code=None, code_type=None):
-        if code_type and code:
-            cursor = await conn.cursor("""select
-                a.id,
-                a.name,
-                a.email,
-                a.phone_primary,
-                a.info,
-                a.actived,
-                a.disabled,
-                a.removed,
-                a.ts_addition,
-                a.ts_modify
-            from users a
-            join user_codes b on b.id_user = a.id
-            where
-                b.code = $1 and
-                b.code_type = $2 and
-                b.removed = false
-            order by a.ts_addition desc""", code, code_type)
+        async with conn.transaction():
+            if code_type and code:
+                cursor = await conn.cursor("""select
+                    a.id,
+                    a.name,
+                    a.email,
+                    a.phone_primary,
+                    a.info,
+                    a.actived,
+                    a.disabled,
+                    a.removed,
+                    a.ts_addition,
+                    a.ts_modify
+                from users a
+                join user_codes b on b.id_user = a.id
+                where
+                    b.code = $1 and
+                    b.code_type = $2 and
+                    b.removed = false
+                order by a.ts_addition desc""", code, code_type)
 
-        elif name:
-            cursor = await conn.cursor("""select
-                a.id,
-                a.name,
-                a.email,
-                a.phone_primary,
-                a.info,
-                a.actived,
-                a.disabled,
-                a.removed,
-                a.ts_addition,
-                a.ts_modify
-            from users a
-            where a.name = $1
-            order by a.ts_addition desc""", name)
+            elif name:
+                cursor = await conn.cursor("""select
+                    a.id,
+                    a.name,
+                    a.email,
+                    a.phone_primary,
+                    a.info,
+                    a.actived,
+                    a.disabled,
+                    a.removed,
+                    a.ts_addition,
+                    a.ts_modify
+                from users a
+                where a.name = $1
+                order by a.ts_addition desc""", name)
 
-        row = await cursor.fetchrow()
-        if row is None:
-            return None
+            row = await cursor.fetchrow()
+            if row is None:
+                return None
 
-        return User(row)
+        return User(dict(row))
