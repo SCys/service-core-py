@@ -58,10 +58,10 @@ def A(msg, *args, **kwargs):
 
 
 # manual debug handlers
-# handler_stream = logging.StreamHandler()
-# handler_stream.setLevel(logging.DEBUG)
-# handler_stream.setFormatter(formatter_default)
-# log_main.addHandler(handler_stream)
+handler_stream = logging.StreamHandler()
+handler_stream.setLevel(logging.DEBUG)
+handler_stream.setFormatter(formatter_default)
+log_main.addHandler(handler_stream)
 # log_debug.addHandler(handler_stream)
-# log_root.addHandler(handler_stream)
-# print("[debug]add stream handler to main and debug logger")
+log_root.addHandler(handler_stream)
+print("[debug]add stream handler to main and debug logger")
