@@ -9,7 +9,7 @@ import tornado.web
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 from xid import Xid
 
-from aiogcd.connector import GcdConnector
+from aiogcd.connector import GcdServiceAccountConnector
 from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 
 from .auth.user import User
@@ -105,12 +105,11 @@ class RequestHandler(tornado.web.RequestHandler):
 
         self.db = self.application.db
 
-        if self.application.ds is None and options.google_pid:
-            self.application.ds = GcdConnector(
-                project_id=options.google_pid,
-                client_id=options.google_cid,
-                client_secret=options.google_secret,
-                token_file=options.google_token_file)
+        if self.application.ds is None and options.google_profile_id and options.google_service_file:
+            self.application.ds = GcdServiceAccountConnector(
+                options.google_profile_id,
+                options.google_service_file,
+            )
 
             await self.application.ds.connect()
             self.D(f'[Handler]google datastore prepared')
