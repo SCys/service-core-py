@@ -2,7 +2,6 @@ import asyncio
 import os
 import signal
 
-import asyncpg
 import tornado.httpserver
 import tornado.options
 import tornado.web
@@ -19,12 +18,12 @@ class Application(tornado.web.Application):
     '''
 
     server: tornado.httpserver.HTTPServer
-    db: asyncpg.pool.Pool
 
     def __init__(self, *args, **kwargs):
         self.load_config()
 
-        self.db = None
+        self.db = None  # async postgresql instance
+        self.ds = None  # async google datastore instance
 
         super().__init__(*args, **kwargs)
 
@@ -53,7 +52,7 @@ class Application(tornado.web.Application):
         if os.name == 'nt':
             self.server.start(1)
         else:
-            self.server.start(1)
+            self.server.start(0)  # auto size by cpu
 
         loop = asyncio.get_event_loop()
         try:

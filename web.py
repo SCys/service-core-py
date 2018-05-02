@@ -4,16 +4,18 @@ helper module
 
 from distutils.version import LooseVersion
 
+import asyncpg
 import tornado.web
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 from xid import Xid
 
-import asyncpg
+from aiogcd.connector import GcdConnector
 from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 
+from .auth.user import User
 from .custom_dict import CustomDict
 from .log import D, E, I, W
 from .options import options
-from .auth.user import User
 
 __all__ = ['JSONError', 'RequestHandler']
 
@@ -102,6 +104,18 @@ class RequestHandler(tornado.web.RequestHandler):
             self.D(f'[Handler]database prepared')
 
         self.db = self.application.db
+
+        if self.application.ds is None and options.google_pid:
+            self.application.ds = GcdConnector(
+                project_id=options.google_pid,
+                client_id=options.google_cid,
+                client_secret=options.google_secret,
+                token_file=options.google_token_file)
+
+            await self.application.ds.connect()
+            self.D(f'[Handler]google datastore prepared')
+
+        self.ds = self.application.ds
 
     def write(self, chunk):
 
@@ -195,3 +209,35 @@ class AuthRequestHandler(RequestHandler):
             return
 
         self.user = user
+
+
+async def http_fetch(url, method='GET', body=None, timeout=None, headers=None) -> HTTPResponse:
+    cli = AsyncHTTPClient()
+    req = HTTPRequest(url, method, headers=headers)
+
+    if timeout is not None:
+        req.connect_timeout = timeout[0]
+        req.request_timeout = timeout[1]
+    else:
+        req.connect_timeout = 2.0
+        req.request_timeout = 5.0
+
+    if body is not None:
+        req.body = body
+
+    return await cli.fetch(req)
+
+
+async def json_fetch(url, *args, **kwargs)-> dict:
+    resp = await http_fetch(url, *args, **kwargs)
+    if resp.code != 200:
+        E('[web.json_fetch]http error:%d %s', resp.code, resp.reason)
+        return
+
+    try:
+        data = loads(resp.body)
+    except Exception as e:
+        E('[web.json_fetch]load error:%s', e)
+        return
+
+    return data
