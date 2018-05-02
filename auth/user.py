@@ -3,8 +3,9 @@ import asyncpg
 from datetime import datetime, timezone
 
 from rapidjson import dumps, DM_ISO8601, loads
+from gcd import Entity
 
-from ..log import E, I
+from ..log import I
 from .user_code import UserCode
 from .user_history import UserHistory
 
@@ -103,8 +104,14 @@ class User(object):
 
     async def create(self, conn: asyncpg.Connection, source: str):
         await conn.execute(
-            '''insert into users(id, name, email, phone_primary, info, actived, disabled, removed, ts_addition, ts_modify) values(
-                $1, $2, $3, $4, $5, false, false, false, now(), now()
+            '''insert into users(
+                id, name, email, phone_primary, info, 
+                actived, disabled, removed, 
+                ts_addition, ts_modify
+            ) values(
+                $1, $2, $3, $4, $5, 
+                false, false, false, 
+                now(), now()
             )''', self.id, self.name, self.email, self.phone_primary, dumps(self.info, datetime_mode=DM_ISO8601))
 
         history = UserHistory({'id_user': self.id, 'action': 'created', 'source': source})
@@ -163,5 +170,70 @@ class User(object):
             row = await cursor.fetchrow()
             if row is None:
                 return None
+
+        return User(dict(row))
+
+    async def create_ds(self, conn, source: str):
+        entity = Entity({
+            'properties': {
+                'name': {'stringValue': self.name},
+                'email': {'stringValue': self.email},
+                'phone_primary': {'stringValue': self.phone_primary},
+                'info': {'textValue': dumps(self.info, datetime_mode=DM_ISO8601)},
+                'actived': {'booleanValue': self.actived},
+                'disabled': {'booleanValue': self.disabled},
+                'removed': {'booleanValue': self.removed},
+                'ts_addition': {'timestampValue': self.ts_addition},
+                'ts_modify': {'timestampValue': self.ts_modify},
+            },
+            'key': {
+                'path': [{'kind': 'user', 'domain': 'auth'}]
+            }
+        })
+
+        await conn.insert_entity(entity)
+
+        # not history in google datastore
+        # history = UserHistory({'id_user': self.id, 'action': 'created', 'source': source})
+        # await history.add(conn)
+
+        I('[User.create]%s created', self)
+
+    async def add_code_ds(self, conn, code_type, code) -> bool:
+        uc = UserCode({
+            'id_user': self.id,
+            'code': code,
+            'code_type': code_type,
+            'removed': False,
+            'tp_expired': datetime(2999, 1, 1, tzinfo=timezone.utc),
+        })
+
+        await uc.create_ds(conn)
+
+    @staticmethod
+    async def find_ds(conn, code=None, code_type=None):
+        if code_type and code:
+            cursor = await conn.cursor("""select
+                a.id,
+                a.name,
+                a.email,
+                a.phone_primary,
+                a.info,
+                a.actived,
+                a.disabled,
+                a.removed,
+                a.ts_addition,
+                a.ts_modify
+            from users a
+            join user_codes b on b.id_user = a.id
+            where
+                b.code = $1 and
+                b.code_type = $2 and
+                b.removed = false
+            order by a.ts_addition desc""", code, code_type)
+
+        row = await cursor.fetchrow()
+        if row is None:
+            return
 
         return User(dict(row))
