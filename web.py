@@ -12,7 +12,6 @@ from xid import Xid
 from aiogcd.connector import GcdServiceAccountConnector
 from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 
-from .auth.user import User
 from .custom_dict import CustomDict
 from .log import D, E, I, W
 from .options import options
@@ -179,35 +178,35 @@ class RequestHandler(tornado.web.RequestHandler):
         return params
 
 
-class AuthRequestHandler(RequestHandler):
+# class AuthRequestHandler(RequestHandler):
 
-    user: User
+#     user: User
 
-    async def prepare(self):
-        await super().prepare()
+#     async def prepare(self):
+#         await super().prepare()
 
-        self.user = None
-        token = self.auth.token
-        if token is None:
-            return
+#         self.user = None
+#         token = self.auth.token
+#         if token is None:
+#             return
 
-        user = await User.find(code=token, code_type='token')
-        if user is None:
-            return
+#         user = await User.find(code=token, code_type='token')
+#         if user is None:
+#             return
 
-        if user.removed:
-            self.E(f'[Handler]{user} is removed')
-            return
+#         if user.removed:
+#             self.E(f'[Handler]{user} is removed')
+#             return
 
-        if not user.actived:
-            self.E(f'[Handler]{user} is not actived')
-            return
+#         if not user.actived:
+#             self.E(f'[Handler]{user} is not actived')
+#             return
 
-        if user.disabled:
-            self.E(f'[Handler]{user} is disabled')
-            return
+#         if user.disabled:
+#             self.E(f'[Handler]{user} is disabled')
+#             return
 
-        self.user = user
+#         self.user = user
 
 
 async def http_fetch(url, method='GET', body=None, timeout=None, headers=None) -> HTTPResponse:
