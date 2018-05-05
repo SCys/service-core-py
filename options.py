@@ -12,5 +12,5 @@ define("db", help="database connection dsn")
 define('address', 'localhost', help='service listen address')
 define('port', 8080, type=int, help='service listen port')
 
-define('google_profile_id', help='Google project id')
+define('google_project_id', help='Google project id')
 define('google_service_file', help='Google service file')

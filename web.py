@@ -104,9 +104,9 @@ class RequestHandler(tornado.web.RequestHandler):
 
         self.db = self.application.db
 
-        if self.application.ds is None and options.google_profile_id and options.google_service_file:
+        if self.application.ds is None and options.google_project_id and options.google_service_file:
             self.application.ds = GcdServiceAccountConnector(
-                options.google_profile_id,
+                options.google_project_id,
                 options.google_service_file,
             )
 
