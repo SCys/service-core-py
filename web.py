@@ -42,7 +42,6 @@ class RequestHandler(tornado.web.RequestHandler):
     params: CustomDict
 
     id: str
-    db: asyncpg.pool.Pool
 
     def initialize(self):
         self.id = Xid().string()
@@ -91,29 +90,31 @@ class RequestHandler(tornado.web.RequestHandler):
                 self.params.update(data.get('params'))
                 self.version = LooseVersion(data.get('version', '0.0.0'))
 
-        await self.prepare_database()
+            self.D("request body:%s", data)
 
-    async def prepare_database(self):
-        if self.application.db is None and options.db:
-            self.application.db = await asyncpg.create_pool(
-                options.db,
-                max_size=30,
-                command_timeout=60,
-            )
-            self.D(f'[Handler]database prepared')
+        # await self.prepare_database()
 
-        self.db = self.application.db
+    # async def prepare_database(self):
+    #     if self.application.db is None and options.db:
+    #         self.application.db = await asyncpg.create_pool(
+    #             options.db,
+    #             max_size=30,
+    #             command_timeout=60,
+    #         )
+    #         self.D(f'[Handler]database prepared')
 
-        if self.application.ds is None and options.google_project_id and options.google_service_file:
-            self.application.ds = GcdServiceAccountConnector(
-                options.google_project_id,
-                options.google_service_file,
-            )
+    #     self.db = self.application.db
 
-            await self.application.ds.connect()
-            self.D(f'[Handler]google datastore prepared')
+    #     if self.application.ds is None and options.google_project_id and options.google_service_file:
+    #         self.application.ds = GcdServiceAccountConnector(
+    #             options.google_project_id,
+    #             options.google_service_file,
+    #         )
 
-        self.ds = self.application.ds
+    #         await self.application.ds.connect()
+    #         self.D(f'[Handler]google datastore prepared')
+
+    #     self.ds = self.application.ds
 
     def write(self, chunk):
 
@@ -136,6 +137,9 @@ class RequestHandler(tornado.web.RequestHandler):
                     'id': self.id,
                 }
             }))
+
+            # raise tornado.web.HTTPError(200)
+            self.finish()
             return
 
         super().write(chunk)
@@ -176,37 +180,6 @@ class RequestHandler(tornado.web.RequestHandler):
             params[key] = value
 
         return params
-
-
-# class AuthRequestHandler(RequestHandler):
-
-#     user: User
-
-#     async def prepare(self):
-#         await super().prepare()
-
-#         self.user = None
-#         token = self.auth.token
-#         if token is None:
-#             return
-
-#         user = await User.find(code=token, code_type='token')
-#         if user is None:
-#             return
-
-#         if user.removed:
-#             self.E(f'[Handler]{user} is removed')
-#             return
-
-#         if not user.actived:
-#             self.E(f'[Handler]{user} is not actived')
-#             return
-
-#         if user.disabled:
-#             self.E(f'[Handler]{user} is disabled')
-#             return
-
-#         self.user = user
 
 
 async def http_fetch(url, method='GET', body=None, timeout=None, headers=None) -> HTTPResponse:
