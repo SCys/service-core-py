@@ -20,6 +20,9 @@ class CustomDict(object):
 
         object.__setattr__(self, '_custom_data', data)
 
+    def __str__(self):
+        return '<CustomDict %d %s>' % (id(self), self._custom_data)
+
     def __eq__(self, other):
         if isinstance(other, CustomDict):
             return self._custom_data == other._custom_data
