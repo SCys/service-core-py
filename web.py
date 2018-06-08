@@ -82,6 +82,7 @@ class RequestHandler(tornado.web.RequestHandler):
         if self.request.method in ('POST', 'PUT') and len(self.request.body) > 0:
             try:
                 data = loads(self.request.body, datetime_mode=DM_ISO8601)
+                self.D("request body:%s", data)
             except Exception as e:
                 self.E('convert body to json failed:%s', e)
             else:
@@ -89,8 +90,6 @@ class RequestHandler(tornado.web.RequestHandler):
                 self.auth.update(data.get('auth'))
                 self.params.update(data.get('params'))
                 self.version = LooseVersion(data.get('version', '0.0.0'))
-
-            self.D("request body:%s", data)
 
         # await self.prepare_database()
 
