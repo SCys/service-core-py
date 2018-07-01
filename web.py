@@ -4,12 +4,12 @@ helper module
 
 from distutils.version import LooseVersion
 
-import asyncpg
 import tornado.web
+from sqlalchemy.engine import Engine
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 from xid import Xid
 
-from aiogcd.connector import GcdServiceAccountConnector
+from core.database import gen_async
 from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 
 from .custom_dict import CustomDict
@@ -40,6 +40,7 @@ class RequestHandler(tornado.web.RequestHandler):
     data: CustomDict
     auth: CustomDict
     params: CustomDict
+    db: Engine
 
     id: str
 
@@ -47,7 +48,7 @@ class RequestHandler(tornado.web.RequestHandler):
         self.id = Xid().string()
         self.auth = CustomDict({})
         self.params = CustomDict({})
-        self.db = None
+        self.db = None 
 
     def I(self, msg, *args, **kwargs):  # noqa
         I(f'[{self.id}]{msg}', *args, **kwargs)
@@ -73,6 +74,8 @@ class RequestHandler(tornado.web.RequestHandler):
             }
         }
         """
+        self.db = await gen_async()
+
         self.data = CustomDict()
         self.params = CustomDict()
         self.auth = CustomDict()

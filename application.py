@@ -5,7 +5,9 @@ import signal
 import tornado.httpserver
 import tornado.options
 import tornado.web
+from sqlalchemy.engine import Engine
 
+from .database import db, gen_async
 from .log import A, I
 from .options import options
 
@@ -13,17 +15,18 @@ __all__ = ['Application']
 
 
 class Application(tornado.web.Application):
-    '''
+    """
     overlay default Application, add more helper settings or options
-    '''
+    """
 
     server: tornado.httpserver.HTTPServer
+
+    db: Engine
 
     def __init__(self, *args, **kwargs):
         self.load_config()
 
         self.db = None  # async postgresql instance
-        self.ds = None  # async google datastore instance
 
         super().__init__(*args, **kwargs)
 
@@ -42,23 +45,22 @@ class Application(tornado.web.Application):
     def start(self):
         I('service on %s:%d version %s', options.address, options.port, options.version)
 
+        loop = asyncio.get_event_loop()
+
+        self.setup_db()
+
+        self.server = self.listen(options.port, options.address, xheaders=True)
+
         # listen on signal
         signal.signal(signal.SIGINT, self.stop)
         signal.signal(signal.SIGTERM, self.stop)
 
-        self.server = self.listen(options.port, options.address, xheaders=True)
+        self.server.start(1)
 
-        # support windows not fork env
-        if os.name == 'nt':
-            self.server.start(1)
-        else:
-            self.server.start(0)  # auto size by cpu
-
-        loop = asyncio.get_event_loop()
         try:
             loop.run_forever()
         except KeyboardInterrupt:
-            self.stop()
+            pass
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
@@ -70,10 +72,19 @@ class Application(tornado.web.Application):
         loop = asyncio.get_event_loop()
         loop.stop()
 
-        exit(0)  # exit with zero
+        I('[Application.stop]wait for loop closed')
+
+        # exit(0)  # exit with zero
 
     def log_request(self, handler):
-        '''overwrite parent log handler''',
+        '''overwrite parent log handler'''
 
         request_time = 1000.0 * handler.request.request_time()
         A("%d %s %.2fms", handler.get_status(), handler._request_summary(), request_time)
+
+    def setup_db(self):
+        # setup database
+        self.db = gen_async()
+
+        self.loop.run_until_complete(db.create_all())
+        I('[Application.setup_db]create all the tables')
