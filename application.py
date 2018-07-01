@@ -26,6 +26,8 @@ class Application(tornado.web.Application):
     def __init__(self, *args, **kwargs):
         self.load_config()
 
+        self.loop = asyncio.get_event_loop()
+
         self.db = None  # async postgresql instance
 
         super().__init__(*args, **kwargs)
@@ -45,7 +47,7 @@ class Application(tornado.web.Application):
     def start(self):
         I('service on %s:%d version %s', options.address, options.port, options.version)
 
-        loop = asyncio.get_event_loop()
+        loop = self.loop
 
         self.setup_db()
 
