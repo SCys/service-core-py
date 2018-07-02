@@ -86,7 +86,8 @@ class Application(tornado.web.Application):
 
     def setup_db(self):
         # setup database
-        self.db = gen_async()
-
+        db = self.loop.run_until_complete(gen_async())
         self.loop.run_until_complete(db.create_all())
+        self.db = db
+
         I('[Application.setup_db]create all the tables')
