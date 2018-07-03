@@ -7,15 +7,17 @@ import gino
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import URL
+from sqlalchemy.dialects import registry
 import rapidjson as json
 
 from .options import options
 
 
 db: Engine = None
-
 md = Gino()
 
+registry.register('sqlalchemy.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
 
 def gen_async(*args, **kwargs) -> Engine:
     global db
