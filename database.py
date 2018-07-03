@@ -2,8 +2,9 @@
 database modal
 """
 
+import asyncio
 from gino import Gino
-import gino
+import gino.dialects.asyncpg
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.url import URL
@@ -16,8 +17,6 @@ from .options import options
 db: Engine = None
 md = Gino()
 
-# registry.register('sqlalchemy.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
-# registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
 
 def gen_async(*args, **kwargs) -> Engine:
     global db
@@ -25,8 +24,9 @@ def gen_async(*args, **kwargs) -> Engine:
     if db is None:
         registry.register('sqlalchemy.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
         registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+
         kwargs.setdefault('strategy', 'gino')
-        db = gen_sync(*args, **kwargs)
+        db = asyncio.get_event_loop().run_until_complete(gen_sync(*args, **kwargs))
         md.bind = db
 
     return db

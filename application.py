@@ -7,7 +7,7 @@ import tornado.options
 import tornado.web
 from sqlalchemy.engine import Engine
 
-from .database import db, gen_async
+from .database import gen_async
 from .log import A, I
 from .options import options
 
@@ -86,7 +86,7 @@ class Application(tornado.web.Application):
 
     def setup_db(self):
         # setup database
-        db = self.loop.run_until_complete(gen_async())
+        db = gen_async()
         self.loop.run_until_complete(db.create_all())
         self.db = db
 

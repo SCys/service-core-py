@@ -48,7 +48,7 @@ class RequestHandler(tornado.web.RequestHandler):
         self.id = Xid().string()
         self.auth = CustomDict({})
         self.params = CustomDict({})
-        self.db = None 
+        self.db = self.application.db
 
     def I(self, msg, *args, **kwargs):  # noqa
         I(f'[{self.id}]{msg}', *args, **kwargs)
@@ -74,8 +74,6 @@ class RequestHandler(tornado.web.RequestHandler):
             }
         }
         """
-        self.db = await gen_async()
-
         self.data = CustomDict()
         self.params = CustomDict()
         self.auth = CustomDict()
