@@ -16,13 +16,15 @@ from .options import options
 db: Engine = None
 md = Gino()
 
-registry.register('sqlalchemy.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
-registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+# registry.register('sqlalchemy.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+# registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
 
 def gen_async(*args, **kwargs) -> Engine:
     global db
 
     if db is None:
+        registry.register('sqlalchemy.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+        registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
         kwargs.setdefault('strategy', 'gino')
         db = gen_sync(*args, **kwargs)
         md.bind = db
