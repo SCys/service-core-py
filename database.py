@@ -7,6 +7,7 @@ import rapidjson as json
 from functools import wraps
 
 from gino import Gino
+import gino.dialects.asyncpg
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
@@ -15,6 +16,9 @@ from .options import options
 
 _db: Engine = None
 md = Gino()
+
+registry.register('postgresql.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
 
 
 def gen_async(*args, **kwargs) -> Engine:
