@@ -6,6 +6,7 @@ from distutils.version import LooseVersion
 from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 
 import tornado.web
+import tornado.curl_httpclient
 from sqlalchemy.engine import Engine
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 from xid import Xid
