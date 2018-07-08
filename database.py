@@ -7,24 +7,24 @@ import rapidjson as json
 from functools import wraps
 
 from gino import Gino
-from gino.dialects.asyncpg import AsyncpgDialect
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
 
+from tornado.options import parse_config_file, parse_command_line
 from .options import options
 
 _db: Engine = None
 md = Gino()
-
-registry.register('postgresql.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
-registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
 
 
 def gen_async(*args, **kwargs) -> Engine:
     global _db
 
     if _db is None:
+        parse_config_file('config.ini')
+        parse_command_line()
+
         registry.register('postgresql.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
         registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
 
