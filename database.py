@@ -7,7 +7,7 @@ import rapidjson as json
 from functools import wraps
 
 from gino import Gino
-import gino.dialects.asyncpg
+import gino.dialects.asyncpg.AsyncpgDialect
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
