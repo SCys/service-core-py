@@ -1,4 +1,3 @@
-
 from tornado.options import define, options  # noqa
 
 # default config path
@@ -12,5 +11,8 @@ define("db", help="database connection dsn")
 define('address', 'localhost', help='service listen address')
 define('port', 8080, type=int, help='service listen port')
 
-define('google_project_id', help='Google project id')
-define('google_service_file', help='Google service file')
+# mail
+define('mail_key', help='mailgun key')
+define('mail_sender', help='mail sender name')
+
+options.parse_command_line()

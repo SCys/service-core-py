@@ -30,6 +30,8 @@ class Application(tornado.web.Application):
 
         self.db = None  # async postgresql instance
 
+        self.setup_db()
+
         super().__init__(*args, **kwargs)
 
     def load_config(self):
@@ -48,8 +50,6 @@ class Application(tornado.web.Application):
         I('service on %s:%d version %s', options.address, options.port, options.version)
 
         loop = self.loop
-
-        self.setup_db()
 
         self.server = self.listen(options.port, options.address, xheaders=True)
 

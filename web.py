@@ -3,20 +3,19 @@ helper module
 '''
 
 from distutils.version import LooseVersion
+from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
 
 import tornado.web
 from sqlalchemy.engine import Engine
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
 from xid import Xid
 
-from core.database import gen_async
-from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
-
 from .custom_dict import CustomDict
 from .log import D, E, I, W
-from .options import options
 
-__all__ = ['JSONError', 'RequestHandler']
+__all__ = ['JSONError', 'RequestHandler', 'http_fetch', 'json_fetch']
+
+AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
 
 
 class JSONError(object):
@@ -92,30 +91,6 @@ class RequestHandler(tornado.web.RequestHandler):
                 self.params.update(data.get('params'))
                 self.version = LooseVersion(data.get('version', '0.0.0'))
 
-        # await self.prepare_database()
-
-    # async def prepare_database(self):
-    #     if self.application.db is None and options.db:
-    #         self.application.db = await asyncpg.create_pool(
-    #             options.db,
-    #             max_size=30,
-    #             command_timeout=60,
-    #         )
-    #         self.D(f'[Handler]database prepared')
-
-    #     self.db = self.application.db
-
-    #     if self.application.ds is None and options.google_project_id and options.google_service_file:
-    #         self.application.ds = GcdServiceAccountConnector(
-    #             options.google_project_id,
-    #             options.google_service_file,
-    #         )
-
-    #         await self.application.ds.connect()
-    #         self.D(f'[Handler]google datastore prepared')
-
-    #     self.ds = self.application.ds
-
     def write(self, chunk):
 
         # output dict as unicode and setup header
@@ -182,15 +157,17 @@ class RequestHandler(tornado.web.RequestHandler):
         return params
 
 
-async def http_fetch(url, method='GET', body=None, timeout=None, headers=None) -> HTTPResponse:
+async def http_fetch(url, method='GET', body=None, timeout=None, headers=None, **kwargs) -> HTTPResponse:
+    method = method.upper()
+
     cli = AsyncHTTPClient()
-    req = HTTPRequest(url, method, headers=headers)
+    req = HTTPRequest(url, method, headers=headers, **kwargs)
 
     if timeout is not None:
         req.connect_timeout = timeout[0]
         req.request_timeout = timeout[1]
     else:
-        req.connect_timeout = 2.0
+        req.connect_timeout = 5.0
         req.request_timeout = 5.0
 
     if body is not None:
@@ -199,7 +176,12 @@ async def http_fetch(url, method='GET', body=None, timeout=None, headers=None) -
     return await cli.fetch(req)
 
 
-async def json_fetch(url, *args, **kwargs)-> dict:
+async def json_fetch(url, *args, **kwargs) -> dict:
+    if 'headers' not in kwargs:
+        kwargs.setdefault('headers', {
+            'Content-Type': 'application/json',
+        })
+
     resp = await http_fetch(url, *args, **kwargs)
     if resp.code != 200:
         E('[web.json_fetch]http error:%d %s', resp.code, resp.reason)

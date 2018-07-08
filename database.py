@@ -3,13 +3,13 @@ database modal
 """
 
 import asyncio
+import rapidjson as json
+from functools import wraps
 
 from gino import Gino
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
-
-import rapidjson as json
 
 from .options import options
 
@@ -41,3 +41,25 @@ def gen_sync(*args, **kwargs) -> Engine:
     kwargs.setdefault('json_deserializer', lambda obj: json.load(obj, datetime_mode=json.DM_ISO8601))
 
     return create_engine(options.db, *args, **kwargs)
+
+
+class DBHelper:
+    db: Engine
+
+    def __init_subclass__(self, *args, **kwargs):
+        super().__init_subclass__(*args, **kwargs)
+
+        self.db = asyncio.get_event_loop().run_until_complete(gen_async())
+
+
+def db_helper(func):
+    """
+    add db:Engine as first arg  
+    """
+
+    @wraps
+    def with_db(*args, **kwargs):
+        global _db
+        return func(db=_db, *args, **kwargs)
+
+    return with_db
