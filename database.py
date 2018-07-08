@@ -4,7 +4,7 @@ database modal
 
 import asyncio
 import rapidjson as json
-from functools import wraps
+# from functools import wraps
 
 from gino import Gino
 from sqlalchemy import create_engine
@@ -60,7 +60,7 @@ def db_helper(func):
     add db:Engine as first arg  
     """
 
-    @wraps
+    # @wraps
     def with_db(*args, **kwargs):
         global _db
         return func(db=_db, *args, **kwargs)
