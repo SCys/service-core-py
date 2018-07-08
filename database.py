@@ -48,12 +48,11 @@ def gen_sync(*args, **kwargs) -> Engine:
 
 
 class DBHelper:
-    db: Engine
 
-    def __init_subclass__(self, *args, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-
-        self.db = asyncio.get_event_loop().run_until_complete(gen_async())
+    @property
+    def db(self):
+        global _db
+        return _db
 
 
 def db_helper(func):
