@@ -44,6 +44,8 @@ def gen_sync(*args, **kwargs) -> Engine:
     kwargs.setdefault('json_serializer', lambda obj: json.dumps(obj, datetime_mode=json.DM_ISO8601))
     kwargs.setdefault('json_deserializer', lambda obj: json.load(obj, datetime_mode=json.DM_ISO8601))
 
+    kwargs.setdefault('echo', False)
+
     return create_engine(options.db, *args, **kwargs)
 
 
