@@ -31,6 +31,9 @@ def gen_async(*args, **kwargs) -> Engine:
         kwargs.setdefault('strategy', 'gino')
         kwargs.setdefault('json_serializer', lambda obj: json.dumps(obj, datetime_mode=json.DM_ISO8601))
         kwargs.setdefault('json_deserializer', lambda obj: json.load(obj, datetime_mode=json.DM_ISO8601))
+
+        kwargs.setdefault('echo', False)
+
         _db = asyncio.get_event_loop().run_until_complete(create_engine(options.db, *args, **kwargs))
         md.bind = _db
 
