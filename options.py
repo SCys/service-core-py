@@ -14,5 +14,6 @@ define('port', 8080, type=int, help='service listen port')
 # mail
 define('mail_key', help='mailgun key')
 define('mail_sender', help='mail sender name')
+define('mail_template_path', './data/mail', help='mail templates folder')
 
 options.parse_command_line()
