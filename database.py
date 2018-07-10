@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.dialects import registry
 from sqlalchemy.engine import Engine
 
-from tornado.options import parse_config_file, parse_command_line
+from tornado.options import parse_config_file
 from .options import options
 
 _db: Engine = None
@@ -23,7 +23,6 @@ def gen_async(*args, **kwargs) -> Engine:
 
     if _db is None:
         parse_config_file('config.ini')
-        parse_command_line()
 
         registry.register('postgresql.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
         registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')

@@ -35,7 +35,7 @@ class Application(tornado.web.Application):
         super().__init__(*args, **kwargs)
 
     def load_config(self):
-        tornado.options.parse_command_line()
+        # tornado.options.parse_command_line()
 
         if os.path.isfile(options.config):
             path = options.config
