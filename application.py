@@ -11,25 +11,21 @@ from .database import gen_async
 from .log import A, I
 from .options import options
 
-__all__ = ['Application']
+__all__ = ["App"]
 
 
-class Application(tornado.web.Application):
+class App(tornado.web.Application):
     """
     overlay default Application, add more helper settings or options
     """
 
     server: tornado.httpserver.HTTPServer
-
     db: Engine
 
     def __init__(self, *args, **kwargs):
         self.load_config()
-
         self.loop = asyncio.get_event_loop()
-
-        self.db = None  # async postgresql instance
-
+        self.db = None
         self.setup_db()
 
         super().__init__(*args, **kwargs)
@@ -42,12 +38,12 @@ class Application(tornado.web.Application):
             try:
                 tornado.options.parse_config_file(path)
             except Exception as e:
-                I('load config error:%s', e)
+                I("load config error:%s", e)
             else:
-                I('load config from %s', path)
+                I("load config from %s", path)
 
     def start(self):
-        I('service on %s:%d version %s', options.address, options.port, options.version)
+        I("service on %s:%d version %s", options.address, options.port, options.version)
 
         loop = self.loop
 
@@ -68,23 +64,33 @@ class Application(tornado.web.Application):
             loop.close()
 
     def stop(self):
-        I('service on %s:%d version %s stoping', options.address, options.port, options.version)
+        I(
+            "service on %s:%d version %s stoping",
+            options.address,
+            options.port,
+            options.version,
+        )
         self.server.stop()
 
         loop = asyncio.get_event_loop()
         loop.stop()
 
-        I('[Application.stop]wait for loop closed')
+        I("[Application.stop]wait for loop closed")
 
         # exit(0)  # exit with zero
 
     def log_request(self, handler):
-        '''overwrite parent log handler'''
+        """overwrite parent log handler"""
 
         request_time = 1000.0 * handler.request.request_time()
-        A("%d %s %.2fms", handler.get_status(), handler._request_summary(), request_time)
+        A(
+            "%d %s %.2fms",
+            handler.get_status(),
+            handler._request_summary(),
+            request_time,
+        )
 
     def setup_db(self):
         # setup database
         self.db = gen_async()
-        I('[Application.setup_db]create all the tables')
+        I("[Application.setup_db]create all the tables")
