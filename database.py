@@ -4,6 +4,7 @@ database modal
 
 import asyncio
 import rapidjson as json
+
 # from functools import wraps
 
 from gino import Gino
@@ -22,37 +23,53 @@ def gen_async(*args, **kwargs) -> Engine:
     global _db
 
     if _db is None:
-        parse_config_file('config.ini')
+        parse_config_file("config.ini")
 
-        registry.register('postgresql.asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
-        registry.register('asyncpg', 'gino.dialects.asyncpg', 'AsyncpgDialect')
+        if not options.db:
+            return None
 
-        kwargs.setdefault('strategy', 'gino')
-        kwargs.setdefault('json_serializer', lambda obj: json.dumps(obj, datetime_mode=json.DM_ISO8601))
-        kwargs.setdefault('json_deserializer', lambda obj: json.loads(obj, datetime_mode=json.DM_ISO8601))
+        registry.register(
+            "postgresql.asyncpg", "gino.dialects.asyncpg", "AsyncpgDialect"
+        )
+        registry.register("asyncpg", "gino.dialects.asyncpg", "AsyncpgDialect")
 
-        kwargs.setdefault('echo', False)
+        kwargs.setdefault("strategy", "gino")
+        kwargs.setdefault(
+            "json_serializer",
+            lambda obj: json.dumps(obj, datetime_mode=json.DM_ISO8601),
+        )
+        kwargs.setdefault(
+            "json_deserializer",
+            lambda obj: json.loads(obj, datetime_mode=json.DM_ISO8601),
+        )
 
-        _db = asyncio.get_event_loop().run_until_complete(create_engine(options.db, *args, **kwargs))
+        kwargs.setdefault("echo", False)
+
+        _db = asyncio.get_event_loop().run_until_complete(
+            create_engine(options.db, *args, **kwargs)
+        )
         md.bind = _db
 
     return _db
 
 
 def gen_sync(*args, **kwargs) -> Engine:
-    kwargs.setdefault('pool_size', 30)
-    kwargs.setdefault('pool_timeout', 30)
-    kwargs.setdefault('max_overflow', 50)
-    kwargs.setdefault('json_serializer', lambda obj: json.dumps(obj, datetime_mode=json.DM_ISO8601))
-    kwargs.setdefault('json_deserializer', lambda obj: json.loads(obj, datetime_mode=json.DM_ISO8601))
+    kwargs.setdefault("pool_size", 30)
+    kwargs.setdefault("pool_timeout", 30)
+    kwargs.setdefault("max_overflow", 50)
+    kwargs.setdefault(
+        "json_serializer", lambda obj: json.dumps(obj, datetime_mode=json.DM_ISO8601)
+    )
+    kwargs.setdefault(
+        "json_deserializer", lambda obj: json.loads(obj, datetime_mode=json.DM_ISO8601)
+    )
 
-    kwargs.setdefault('echo', False)
+    kwargs.setdefault("echo", False)
 
     return create_engine(options.db, *args, **kwargs)
 
 
 class DBHelper:
-
     @property
     def db(self):
         global _db
