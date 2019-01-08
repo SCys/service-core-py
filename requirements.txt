@@ -1,4 +1,0 @@
-tornado
-python-rapidjson
-xid
-gino

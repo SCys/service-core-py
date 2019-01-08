@@ -1,189 +1,224 @@
-"""
-helper module
-"""
+import asyncio
+import configparser
+import sys
+from decimal import Decimal
+from rapidjson import DM_ISO8601, dumps, loads
 
-from distutils.version import LooseVersion
-from rapidjson import DM_ISO8601, DM_NAIVE_IS_UTC, dumps, loads
+import aiohttp.web
+import asyncio_redis
+from asyncpg import Connection, create_pool
 
-import tornado.web
-import tornado.curl_httpclient
-from sqlalchemy.engine import Engine
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPResponse
-from xid import Xid
+from .logging import app_logger, access_logger
 
-from .custom_dict import CustomDict
-from .log import D, E, I, W
+if sys.platform != "win32":
+    import uvloop
 
-__all__ = ["JSONError", "RequestHandler", "http_fetch", "json_fetch"]
-
-AsyncHTTPClient.configure("tornado.curl_httpclient.CurlAsyncHTTPClient")
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
-class JSONError(object):
-    """
-    custom error with json format
-    """
+def _custom_json_dump(obj):
+    if hasattr(obj, "dump"):
+        return obj.dump()
 
-    code = 204
-    message = None
-
-    def __init__(self, code, msg):
-        self.code = code
-        self.message = msg
+    elif isinstance(obj, Decimal):
+        return float(obj)
 
 
-class RequestHandler(tornado.web.RequestHandler):
-    """
-    overlay default RequestHandler
-    """
+class ErrorBasic(Exception):
+    code = 500
+    error = "unknown error"
 
-    data: CustomDict
-    auth: CustomDict
-    params: CustomDict
-    db: Engine
+    def __init__(self, code=None, msg=None):
+        if code is not None:
+            self.code = code
+        if msg is not None:
+            self.error = msg
 
-    id: str
+        self.status_code = self.code
+        self.reason = self.error
+        self.log_message = None
 
-    def initialize(self):
-        self.id = Xid().string()
-        self.auth = CustomDict({})
-        self.params = CustomDict({})
-        self.db = self.application.db
-
-    def I(self, msg, *args, **kwargs):  # noqa
-        I(f"[{self.id}]{msg}", *args, **kwargs)
-
-    def E(self, msg, *args, **kwargs):
-        E(f"[{self.id}]{msg}", *args, **kwargs)
-
-    def W(self, msg, *args, **kwargs):
-        W(f"[{self.id}]{msg}", *args, **kwargs)
-
-    def D(self, msg, *args, **kwargs):
-        D(f"[{self.id}]{msg}", *args, **kwargs)
-
-    async def prepare(self):
-        """
-        support request body is json text:
-
-        {
-            "version": "api version string, default 0.0.0",
-            "auth": { ... auth object ... },
-            "params": {
-                ... request params ...
-            }
-        }
-        """
-        self.data = CustomDict()
-        self.params = CustomDict()
-        self.auth = CustomDict()
-        self.version = LooseVersion("0.0.0")
-
-        # dump request json text body to json object
-        if self.request.method in ("POST", "PUT") and len(self.request.body) > 0:
-            try:
-                data = loads(self.request.body, datetime_mode=DM_ISO8601)
-                self.D("request body:%s", data)
-            except Exception as e:
-                self.E("convert body to json failed:%s", e)
-            else:
-                self.data.update(data)
-                self.auth.update(data.get("auth"))
-                self.params.update(data.get("params"))
-                self.version = LooseVersion(data.get("version", "0.0.0"))
-
-    def write(self, chunk):
-
-        # output dict as unicode and setup header
-        if isinstance(chunk, dict):
-            self.set_header("Content-Type", "application/json")
-            chunk = dumps(chunk, datetime_mode=DM_ISO8601 | DM_NAIVE_IS_UTC)
-
-        elif isinstance(chunk, CustomDict):
-            self.set_header("Content-Type", "application/json")
-            chunk = chunk.dumps()
-
-        elif isinstance(chunk, JSONError):
-            self.set_header("Content-Type", "application/json")
-            self.set_status(200)
-            self.write(dumps({"error": {"code": chunk.code, "message": chunk.message, "id": self.id}}))
-
-            # raise tornado.web.HTTPError(200)
-            self.finish()
-            return
-
-        super().write(chunk)
-
-    def check_params(self):
-        if not hasattr(self, "params_required"):
-            return None
-
-        params = CustomDict({})
-        for key, trunk in self.params_required.items():
-            if key not in self.params:
-                self.E(f"param {key} is missed")
-                return None
-
-            value = self.params[key]
-            if not isinstance(value, trunk[0]):
-                self.E(f"param {key} is missed")
-                return None
-
-            if trunk[0] == int:
-                if len(trunk) > 1 and value < trunk[1]:
-                    self.E(f"param {key} value {value} small than {trunk[1]}")
-                    return None
-
-                if len(trunk) > 2 and value > trunk[1]:
-                    self.E(f"param {key} value {value} large than {trunk[2]}")
-                    return None
-
-            elif trunk[0] == str:
-                if len(trunk) > 1 and len(value) < trunk[1]:
-                    self.E(f"param {key} value {value} length small than {trunk[1]}")
-                    return None
-
-                if len(trunk) > 2 and len(value) > trunk[1]:
-                    self.E(f"param {key} value {value} length large than {trunk[2]}")
-                    return None
-
-            params[key] = value
-
-        return params
+    def dump(self):
+        return {"code": self.code, "error": self.error}
 
 
-async def http_fetch(url, method="GET", body=None, timeout=None, headers=None, **kwargs) -> HTTPResponse:
-    method = method.upper()
+class ServerError(ErrorBasic):
+    code = 500
+    error = "server error"
 
-    cli = AsyncHTTPClient()
-    req = HTTPRequest(url, method, headers=headers, **kwargs)
 
-    if timeout is not None:
-        req.connect_timeout = timeout[0]
-        req.request_timeout = timeout[1]
+class InvalidParams(ErrorBasic):
+    code = 400
+    error = "invalid params"
+
+
+class ObjectNotFound(ErrorBasic):
+    code = 404
+    error = "object not found"
+
+
+class Unauthorized(ErrorBasic):
+    code = 401
+    error = "unauthorized"
+
+
+class KeyConflict(ErrorBasic):
+    code = 409
+    error = "key conflict"
+
+
+class NoPermission(ErrorBasic):
+    code = 403
+    error = "no permission"
+
+
+class RemoteServerError(ErrorBasic):
+    code = 502
+    error = "remote server error"
+
+
+def get_info(request):
+    return {
+        "remote_ip": request.remote,
+        "user_agent": request.headers.get("User-Agent"),
+        "referrer": request.headers.get("Referer"),
+    }
+
+
+def a(request, exception=None):
+    if exception is None:
+        access_logger.info("%s - %s 200 -", request.remote, request.url)
     else:
-        req.connect_timeout = 5.0
-        req.request_timeout = 5.0
-
-    if body is not None:
-        req.body = body
-
-    return await cli.fetch(req)
+        access_logger.info("%s - %s 200 - %d %s", request.remote, request.url, exception.code, exception.error)
 
 
-async def json_fetch(url, *args, **kwargs) -> dict:
-    if "headers" not in kwargs:
-        kwargs.setdefault("headers", {"Content-Type": "application/json"})
+def w(msg, *args, **kwargs):
+    # logger.warning("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
+    app_logger.warning("%s" % (msg), *args, **kwargs)
 
-    resp = await http_fetch(url, *args, **kwargs)
-    if resp.code != 200:
-        E("[web.json_fetch]http error:%d %s", resp.code, resp.reason)
-        return
 
+def e(msg, *args, **kwargs):
+    # logger.error("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
+    app_logger.error("%s" % (msg), *args, **kwargs)
+
+
+def i(msg, *args, **kwargs):
+    # logger.info("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
+    app_logger.info("%s" % (msg), *args, **kwargs)
+
+
+def d(msg, *args, **kwargs):
+    # logger.debug("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
+    app_logger.debug("%s" % (msg), *args, **kwargs)
+
+
+@aiohttp.web.middleware
+async def middleware_default(request: aiohttp.web.Request, handler):
+    # get X-Forwarded-For
+    request = request.clone(remote=request.headers.get("X-Forwarded-For", request.remote))
+
+    # loggers
+    request.w = w
+    request.e = e
+    request.i = i
+    request.d = d
+
+    request.get_info = lambda: get_info(request)
+
+    # inspect
+    request.db = request.app.db
+    request.redis = request.app.redis
+
+    # parse json
+    data: dict = {}
+    params: dict = {}
+    if request.body_exists and ("application/json" in request.content_type or "text/plain" in request.content_type):
+        content = await request.text()
+        if content:
+            data = loads(content, datetime_mode=DM_ISO8601)
+            params = data.get("params", {})
+        else:
+            data = {"params": {}}
+            params = {}
+    request.data = data
+    request.params = params
+
+    # run handler and handle the exception
     try:
-        data = loads(resp.body)
-    except Exception as e:
-        E("[web.json_fetch]load error:%s", e)
-        return
+        trunk = await handler(request)
+        if isinstance(trunk, dict):
+            response = aiohttp.web.Response(
+                body=dumps(trunk, datetime_mode=DM_ISO8601, default=_custom_json_dump),
+                status=200,
+                content_type="application/json",
+            )
 
-    return data
+        elif isinstance(trunk, str):
+            response = aiohttp.web.Response(text=str, status=200)
+
+        else:
+            response = trunk
+
+    except ErrorBasic as exc:
+        a(request, exc)
+        response = aiohttp.web.Response(
+            body=dumps({"code": exc.code, "error": exc.error}, datetime_mode=DM_ISO8601, default=_custom_json_dump),
+            status=200,
+            content_type="application/json",
+        )
+    else:
+        a(request)
+    return response
+
+
+class Application(aiohttp.web.Application):
+    __version__ = "0.2.6"
+
+    db: Connection
+    redis: asyncio_redis.Pool
+    config: configparser.ConfigParser
+
+    def __init__(self, routes, **kwargs):
+        self.db = None
+        self.redis = None
+        self.server = None
+
+        # read main.ini
+        self.config = configparser.ConfigParser()
+        self.config.read("./main.ini")
+
+        kwargs["client_max_size"] = 1024 * 1024 * 512  # 512M
+        super().__init__(**kwargs)
+
+        self.middlewares.append(middleware_default)
+
+        self.logger = app_logger
+
+        for route in routes:
+            method = getattr(self.router, "add_%s" % route[0])
+            method(route[1], route[2])
+            app_logger.info("add route %s %s %s", *route)
+
+        app_logger.info("application(%s) initialized", self.__version__)
+
+    def start(self):
+        self.middlewares.freeze()
+        self.on_startup.append(self.setup)
+
+        host = self.config["default"].get("host", "0.0.0.0")
+        port = self.config["default"].get("port", 80)
+
+        aiohttp.web.run_app(self, host=host, port=port)
+
+    @staticmethod
+    async def setup(app):
+        db_dsn = app.config["default"]["dsn"]
+        db_size = app.config["default"].get("db_size", 50)
+        app.db = await create_pool(
+            dsn=db_dsn, min_size=5, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
+        )
+
+        app.redis = await asyncio_redis.Pool.create(
+            host=app.config["default"].get("redis_host"), port=int(app.config["default"].get("redis_port"))
+        )
+
