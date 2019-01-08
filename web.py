@@ -8,7 +8,7 @@ import aiohttp.web
 import asyncio_redis
 from asyncpg import Connection, create_pool
 
-from .logging import app_logger, access_logger
+from .logging import app_logger as logger, access_logger
 
 if sys.platform != "win32":
     import uvloop
@@ -22,6 +22,20 @@ def _custom_json_dump(obj):
 
     elif isinstance(obj, Decimal):
         return float(obj)
+
+
+class BasicHandler(aiohttp.web.View):
+    def i(self, *args, **kwargs):
+        self.request.i(*args, **kwargs)
+
+    def d(self, *args, **kwargs):
+        self.request.d(*args, **kwargs)
+
+    def e(self, *args, **kwargs):
+        self.request.e(*args, **kwargs)
+
+    def w(self, *args, **kwargs):
+        self.request.w(*args, **kwargs)
 
 
 class ErrorBasic(Exception):
@@ -94,22 +108,22 @@ def a(request, exception=None):
 
 def w(msg, *args, **kwargs):
     # logger.warning("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    app_logger.warning("%s" % (msg), *args, **kwargs)
+    logger.warning("%s" % (msg), *args, **kwargs)
 
 
 def e(msg, *args, **kwargs):
     # logger.error("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    app_logger.error("%s" % (msg), *args, **kwargs)
+    logger.error("%s" % (msg), *args, **kwargs)
 
 
 def i(msg, *args, **kwargs):
     # logger.info("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    app_logger.info("%s" % (msg), *args, **kwargs)
+    logger.info("%s" % (msg), *args, **kwargs)
 
 
 def d(msg, *args, **kwargs):
     # logger.debug("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    app_logger.debug("%s" % (msg), *args, **kwargs)
+    logger.debug("%s" % (msg), *args, **kwargs)
 
 
 @aiohttp.web.middleware
@@ -192,14 +206,21 @@ class Application(aiohttp.web.Application):
 
         self.middlewares.append(middleware_default)
 
-        self.logger = app_logger
+        self.logger = logger
 
         for route in routes:
-            method = getattr(self.router, "add_%s" % route[0])
-            method(route[1], route[2])
-            app_logger.info("add route %s %s %s", *route)
+            key = route[0]
+            if key in ["post", "get", "delete", "put", "option", "head"]:
+                method = getattr(self.router, "add_%s" % route[0])
+                method(route[1], route[2])
+                logger.info("add route %s %s %s", *route)
+            elif len(route) == 2 and isinstance(route[1], BasicHandler):
+                self.router.add_view(route[0], route[1])
+            else:
+                logger.error("invalid route:%s", route)
+                raise InvalidParams(400, "invalid route")
 
-        app_logger.info("application(%s) initialized", self.__version__)
+        logger.info("application(%s) initialized", self.__version__)
 
     def start(self):
         self.middlewares.freeze()
