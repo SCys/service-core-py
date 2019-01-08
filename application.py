@@ -64,12 +64,7 @@ class App(tornado.web.Application):
             loop.close()
 
     def stop(self):
-        I(
-            "service on %s:%d version %s stoping",
-            options.address,
-            options.port,
-            options.version,
-        )
+        I("service on %s:%d version %s stoping", options.address, options.port, options.version)
         self.server.stop()
 
         loop = asyncio.get_event_loop()
@@ -83,12 +78,7 @@ class App(tornado.web.Application):
         """overwrite parent log handler"""
 
         request_time = 1000.0 * handler.request.request_time()
-        A(
-            "%d %s %.2fms",
-            handler.get_status(),
-            handler._request_summary(),
-            request_time,
-        )
+        A("%d %s %.2fms", handler.get_status(), handler._request_summary(), request_time)
 
     def setup_db(self):
         # setup database

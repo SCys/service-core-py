@@ -1,8 +1,7 @@
-
 from rapidjson import dumps, DM_ISO8601, DM_NAIVE_IS_UTC
 
 
-__all__ = ['CustomDict']
+__all__ = ["CustomDict"]
 
 
 class CustomDict(object):
@@ -18,10 +17,10 @@ class CustomDict(object):
         elif isinstance(raw, CustomDict):
             data.update(raw._custom_data)
 
-        object.__setattr__(self, '_custom_data', data)
+        object.__setattr__(self, "_custom_data", data)
 
     def __str__(self):
-        return '<CustomDict %d %s>' % (id(self), self._custom_data)
+        return "<CustomDict %d %s>" % (id(self), self._custom_data)
 
     def __eq__(self, other):
         if isinstance(other, CustomDict):
@@ -49,7 +48,7 @@ class CustomDict(object):
         return value
 
     def __getattr__(self, name):
-        data = object.__getattribute__(self, '_custom_data')
+        data = object.__getattribute__(self, "_custom_data")
         if name in data:
             return data.get(name)
 
