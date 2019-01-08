@@ -37,6 +37,25 @@ class BasicHandler(aiohttp.web.View):
     def w(self, *args, **kwargs):
         self.request.w(*args, **kwargs)
 
+    def get_info(self):
+        return get_info(self.request)
+
+    @property
+    def db(self):
+        return self.request.db
+
+    @property
+    def redis(self):
+        return self.request.app.redis
+
+    @property
+    def data(self):
+        return self.request.data
+
+    @property
+    def params(self):
+        return self.request.params
+
 
 class ErrorBasic(Exception):
     code = 500
