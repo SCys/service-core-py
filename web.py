@@ -1,19 +1,25 @@
 import asyncio
 import configparser
+import gzip
+import io
 import sys
 from decimal import Decimal
-from rapidjson import DM_ISO8601, dumps, loads
 
 import aiohttp.web
-import asyncio_redis
 from asyncpg import Connection, create_pool
 
-from .logging import app_logger as logger, access_logger
+import asyncio_redis
+from rapidjson import DM_ISO8601, dumps, loads
+from utils.ip2region import Ip2Region
 
-if sys.platform != "win32":
-    import uvloop
+from .logging import access_logger
+from .logging import app_logger as logger
+from . import ipgeo
 
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+# if sys.platform != "win32":
+#     import uvloop
+
+#     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 def _custom_json_dump(obj):
@@ -25,6 +31,9 @@ def _custom_json_dump(obj):
 
 
 class BasicHandler(aiohttp.web.View):
+
+    request: aiohttp.web.Request
+
     def i(self, *args, **kwargs):
         self.request.i(*args, **kwargs)
 
@@ -176,6 +185,8 @@ async def middleware_default(request: aiohttp.web.Request, handler):
     request.data = data
     request.params = params
 
+    # parse ipgeo
+
     # run handler and handle the exception
     try:
         trunk = await handler(request)
@@ -187,7 +198,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
             )
 
         elif isinstance(trunk, str):
-            response = aiohttp.web.Response(text=str, status=200)
+            response = aiohttp.web.Response(text=trunk, status=200)
 
         else:
             response = trunk
@@ -214,10 +225,11 @@ class Application(aiohttp.web.Application):
     def __init__(self, routes, **kwargs):
         self.db = None
         self.redis = None
-        self.server = None
 
         # read main.ini
-        self.config = configparser.ConfigParser()
+        config = configparser.ConfigParser()
+        config['default'] = {}
+        self.config = config
         self.config.read("./main.ini")
 
         kwargs["client_max_size"] = 1024 * 1024 * 512  # 512M
@@ -233,8 +245,9 @@ class Application(aiohttp.web.Application):
                 method = getattr(self.router, "add_%s" % route[0])
                 method(route[1], route[2])
                 logger.info("add route %s %s %s", *route)
-            elif len(route) == 2 and isinstance(route[1], BasicHandler):
+            elif len(route) == 2:
                 self.router.add_view(route[0], route[1])
+                logger.info("add view %s %s", *route)
             else:
                 logger.error("invalid route:%s", route)
                 raise InvalidParams(400, "invalid route")
@@ -245,20 +258,26 @@ class Application(aiohttp.web.Application):
         self.middlewares.freeze()
         self.on_startup.append(self.setup)
 
-        host = self.config["default"].get("host", "0.0.0.0")
-        port = self.config["default"].get("port", 80)
+        section = self.config["default"]
+        host = section.get("host", "0.0.0.0")
+        port = int(section.get("port", 80))
 
         aiohttp.web.run_app(self, host=host, port=port)
 
     @staticmethod
     async def setup(app):
-        db_dsn = app.config["default"]["dsn"]
-        db_size = app.config["default"].get("db_size", 50)
-        app.db = await create_pool(
-            dsn=db_dsn, min_size=5, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
-        )
+        section = app.config["default"]
 
-        app.redis = await asyncio_redis.Pool.create(
-            host=app.config["default"].get("redis_host"), port=int(app.config["default"].get("redis_port"))
-        )
+        # setup database connection
+        db_dsn = section.get("dsn")
+        if db_dsn:
+            db_size = app.config["default"].get("db_size", 50)
+            app.db = await create_pool(
+                dsn=db_dsn, min_size=5, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
+            )
 
+        redis_host = section.get("redis_host")
+        if redis_host:
+            app.redis = await asyncio_redis.Pool.create(host=section.get("redis_host"), port=int(section.get("redis_port")))
+
+        await ipgeo.ip2region_update()
