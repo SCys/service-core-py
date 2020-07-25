@@ -2,11 +2,14 @@ import gzip
 import io
 import logging
 
+# copy from https://github.com/lionsoul2014/ip2region/blob/master/binding/python/ip2Region.py
 from utils.ip2region import Ip2Region
 
 ip2region = None
 
 logger = logging.getLogger(__name__)
+
+url_db = "https://cdn.jsdelivr.net/gh/lionsoul2014/ip2region@v2.2.0-release/data/ip2region.db"
 
 
 async def ip2region_update():
@@ -16,24 +19,11 @@ async def ip2region_update():
 
     # download remote source
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
-        async with session.get("https://iscys.com/f/ipgeo/ip2region.db.latest.gz") as response:
+        async with session.get(url_db) as response:
             content = await response.read()
-            fobj = io.BytesIO(gzip.decompress(content))
-            logger.info("ip2region is loaded")
-            ip2region = Ip2Region(fobj)
+            ip2region = Ip2Region(content)
 
-
-def ip2region_update_sync():
-    import requests
-
-    global ip2region
-
-    # download remote source
-    response = requests.get("https://iscys.com/f/ipgeo/ip2region.db.latest.gz")
-    content = response.body
-    fobj = io.BytesIO(gzip.decompress(content))
     logger.info("ip2region is loaded")
-    ip2region = Ip2Region(fobj)
 
 
 def find(ip):

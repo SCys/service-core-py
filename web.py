@@ -4,22 +4,22 @@ import gzip
 import io
 import sys
 from decimal import Decimal
+from typing import Optional
 
 import aiohttp.web
-from asyncpg import Connection, create_pool
+import asyncpg.pool
+from asyncpg import create_pool
 
-import asyncio_redis
-from rapidjson import DM_ISO8601, dumps, loads
-from utils.ip2region import Ip2Region
+from orjson import dumps, loads
 
+from . import ipgeo
 from .logging import access_logger
 from .logging import app_logger as logger
-from . import ipgeo
 
-# if sys.platform != "win32":
-#     import uvloop
+if sys.platform != "win32":
+    import uvloop
 
-#     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
 
 def _custom_json_dump(obj):
@@ -50,12 +50,8 @@ class BasicHandler(aiohttp.web.View):
         return get_info(self.request)
 
     @property
-    def db(self):
+    def db(self) -> Optional[asyncpg.pool.Pool]:
         return self.request.db
-
-    @property
-    def redis(self):
-        return self.request.app.redis
 
     @property
     def data(self):
@@ -169,7 +165,6 @@ async def middleware_default(request: aiohttp.web.Request, handler):
 
     # inspect
     request.db = request.app.db
-    request.redis = request.app.redis
 
     # parse json
     data: dict = {}
@@ -192,9 +187,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
         trunk = await handler(request)
         if isinstance(trunk, dict):
             response = aiohttp.web.Response(
-                body=dumps(trunk, datetime_mode=DM_ISO8601, default=_custom_json_dump),
-                status=200,
-                content_type="application/json",
+                body=dumps(trunk, default=_custom_json_dump), status=200, content_type="application/json",
             )
 
         elif isinstance(trunk, str):
@@ -206,7 +199,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
     except ErrorBasic as exc:
         a(request, exc)
         response = aiohttp.web.Response(
-            body=dumps({"code": exc.code, "error": exc.error}, datetime_mode=DM_ISO8601, default=_custom_json_dump),
+            body=dumps({"code": exc.code, "error": exc.error}, default=_custom_json_dump),
             status=200,
             content_type="application/json",
         )
@@ -218,17 +211,15 @@ async def middleware_default(request: aiohttp.web.Request, handler):
 class Application(aiohttp.web.Application):
     __version__ = "0.2.6"
 
-    db: Connection
-    redis: asyncio_redis.Pool
+    db: Optional[asyncpg.pool.Pool] = None
     config: configparser.ConfigParser
 
     def __init__(self, routes, **kwargs):
         self.db = None
-        self.redis = None
 
         # read main.ini
         config = configparser.ConfigParser()
-        config['default'] = {}
+        config["default"] = {}
         self.config = config
         self.config.read("./main.ini")
 
@@ -275,9 +266,5 @@ class Application(aiohttp.web.Application):
             app.db = await create_pool(
                 dsn=db_dsn, min_size=5, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
             )
-
-        redis_host = section.get("redis_host")
-        if redis_host:
-            app.redis = await asyncio_redis.Pool.create(host=section.get("redis_host"), port=int(section.get("redis_port")))
 
         await ipgeo.ip2region_update()

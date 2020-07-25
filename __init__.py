@@ -9,4 +9,4 @@ from .web import (
     RemoteServerError,
 )
 from .web import Application
-from .serial import DumpMethod, HasInfoField
+from .serial import DumpMethod, HasInfoField, BasicFields
