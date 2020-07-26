@@ -8,5 +8,5 @@ from .web import (
     NoPermission,
     RemoteServerError,
 )
-from .web import Application
+from .web import Application, get_config
 from .serial import DumpMethod, HasInfoField, BasicFields

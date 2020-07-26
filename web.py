@@ -21,6 +21,19 @@ if sys.platform != "win32":
 
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
+_config: Optional[configparser.ConfigParser] = None
+
+
+def get_config() -> configparser.ConfigParser:
+    global _config
+
+    if not _config:
+        _config = configparser.ConfigParser()
+        _config["default"] = {}
+        _config.read("./main.ini")
+
+    return _config
+
 
 def _custom_json_dump(obj):
     if hasattr(obj, "dump"):
@@ -28,6 +41,8 @@ def _custom_json_dump(obj):
 
     elif isinstance(obj, Decimal):
         return float(obj)
+
+    return
 
 
 class BasicHandler(aiohttp.web.View):
@@ -217,11 +232,7 @@ class Application(aiohttp.web.Application):
     def __init__(self, routes, **kwargs):
         self.db = None
 
-        # read main.ini
-        config = configparser.ConfigParser()
-        config["default"] = {}
-        self.config = config
-        self.config.read("./main.ini")
+        self.config = get_config()
 
         kwargs["client_max_size"] = 1024 * 1024 * 512  # 512M
         super().__init__(**kwargs)
