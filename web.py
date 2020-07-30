@@ -42,8 +42,6 @@ def _custom_json_dump(obj):
     elif isinstance(obj, Decimal):
         return float(obj)
 
-    return
-
 
 class BasicHandler(aiohttp.web.View):
 
