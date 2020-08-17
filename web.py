@@ -52,11 +52,11 @@ class BasicHandler(aiohttp.web.View):
         return self.request.db
 
     @property
-    def data(self):
+    def data(self) -> dict:
         return self.request.data
 
     @property
-    def params(self):
+    def params(self) -> dict:
         return self.request.params
 
 
@@ -255,14 +255,15 @@ class Application(aiohttp.web.Application):
 
     @staticmethod
     async def setup(app):
-        section = app.config["default"]
+        config = load_config()
+        section = config["database"]
 
         # setup database connection
         db_dsn = section.get("dsn")
         if db_dsn:
-            db_size = app.config["default"].get("db_size", 50)
+            db_size = section.getint("db_size")
             app.db = await create_pool(
-                dsn=db_dsn, min_size=5, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
+                dsn=db_dsn, min_size=1, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
             )
 
         await ipgeo.ip2region_update()

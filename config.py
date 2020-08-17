@@ -24,6 +24,8 @@ def load_config() -> ConfigParser:
             "port": 8080,
         }
 
+        config["database"] = {"dsn": "", "db_size": 50}
+
         try:
             config.read_file("./main.ini")
         except Exception as e:
