@@ -1,19 +1,24 @@
-import logging
+from loguru import logger
 
-app_logger = logging.getLogger("main")
-app_logger.setLevel(logging.INFO)
-app_logger.addHandler(logging.FileHandler("log/main.log"))
+__all__ = []
+names = globals()
 
-access_logger = logging.getLogger("access")
-access_logger.setLevel(logging.INFO)
-access_logger.addHandler(logging.FileHandler("log/access.log"))
+for name, name_long, limit_size, limit_retention in [
+    ["app", "application", "10 MB", "3 months"],
+    ["info", "info", "20 MB", "12 months"],
+    ["access", "access", "50 MB", "12 months"],
+    ["debug", "debug", "50 MB", "1 months"],
+]:
+    logger.add(
+        f"log/{name_long}.log",
+        rotation=limit_size,
+        retention=limit_retention,
+        compression="gz",
+        delay=True,
+        buffering=1024,
+        filter=lambda r: f"is_{name_long}" in r["extra"],
+    )
+    names[f"logger_{name}"] = logger.bind(**{f"is_{name_long}": True})
+    __all__.append(f"logger_{name}")
+    print(f"setup logger_{name} as {name_long}")
 
-debug_logger = logging.getLogger("debug")
-debug_logger.setLevel(logging.DEBUG)
-debug_logger.addHandler(logging.FileHandler("log/debug.log"))
-
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-
-app_logger.addHandler(console)
-access_logger.addHandler(console)

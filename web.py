@@ -1,38 +1,23 @@
 import asyncio
 import configparser
-import gzip
-import io
 import sys
 from decimal import Decimal
 from typing import Optional
 
 import aiohttp.web
 import asyncpg.pool
+import orjson as json
 from asyncpg import create_pool
 
-from orjson import dumps, loads
-
 from . import ipgeo
-from .logging import access_logger
-from .logging import app_logger as logger
+from .config import load_config
+from .logging import logger_access
+from .logging import logger_app as logger
 
 if sys.platform != "win32":
     import uvloop
 
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-_config: Optional[configparser.ConfigParser] = None
-
-
-def get_config() -> configparser.ConfigParser:
-    global _config
-
-    if not _config:
-        _config = configparser.ConfigParser()
-        _config["default"] = {}
-        _config.read("./main.ini")
-
-    return _config
 
 
 def _custom_json_dump(obj):
@@ -138,9 +123,9 @@ def get_info(request):
 
 def a(request, exception=None):
     if exception is None:
-        access_logger.info("%s - %s 200 -", request.remote, request.url)
+        logger_access.info("%s - %s 200 -", request.remote, request.url)
     else:
-        access_logger.info("%s - %s 200 - %d %s", request.remote, request.url, exception.code, exception.error)
+        logger_access.info("%s - %s 200 - %d %s", request.remote, request.url, exception.code, exception.error)
 
 
 def w(msg, *args, **kwargs):
@@ -185,7 +170,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
     if request.body_exists and ("application/json" in request.content_type or "text/plain" in request.content_type):
         content = await request.text()
         if content:
-            data = loads(content, datetime_mode=DM_ISO8601)
+            data = json.loads(content)
             params = data.get("params", {})
         else:
             data = {"params": {}}
@@ -200,7 +185,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
         trunk = await handler(request)
         if isinstance(trunk, dict):
             response = aiohttp.web.Response(
-                body=dumps(trunk, default=_custom_json_dump), status=200, content_type="application/json",
+                body=json.dumps(trunk, default=_custom_json_dump), status=200, content_type="application/json",
             )
 
         elif isinstance(trunk, str):
@@ -212,7 +197,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
     except ErrorBasic as exc:
         a(request, exc)
         response = aiohttp.web.Response(
-            body=dumps({"code": exc.code, "error": exc.error}, default=_custom_json_dump),
+            body=json.dumps({"code": exc.code, "error": exc.error}, default=_custom_json_dump),
             status=200,
             content_type="application/json",
         )
@@ -222,7 +207,7 @@ async def middleware_default(request: aiohttp.web.Request, handler):
 
 
 class Application(aiohttp.web.Application):
-    __version__ = "0.2.6"
+    __version__ = "0.2.7"
 
     db: Optional[asyncpg.pool.Pool] = None
     config: configparser.ConfigParser
@@ -230,7 +215,7 @@ class Application(aiohttp.web.Application):
     def __init__(self, routes, **kwargs):
         self.db = None
 
-        self.config = get_config()
+        self.config = load_config()
 
         kwargs["client_max_size"] = 1024 * 1024 * 512  # 512M
         super().__init__(**kwargs)
@@ -244,23 +229,27 @@ class Application(aiohttp.web.Application):
             if key in ["post", "get", "delete", "put", "option", "head"]:
                 method = getattr(self.router, "add_%s" % route[0])
                 method(route[1], route[2])
-                logger.info("add route %s %s %s", *route)
+                logger.info(f"add route {route[0]} {route[1]} {route[2]}")
+
             elif len(route) == 2:
                 self.router.add_view(route[0], route[1])
-                logger.info("add view %s %s", *route)
+                logger.info(f"add view {route[0]} {route[1]}")
+
             else:
                 logger.error("invalid route:%s", route)
                 raise InvalidParams(400, "invalid route")
 
-        logger.info("application(%s) initialized", self.__version__)
+        logger.info(f"application({self.__version__}) initialized")
 
     def start(self):
         self.middlewares.freeze()
         self.on_startup.append(self.setup)
 
-        section = self.config["default"]
-        host = section.get("host", "0.0.0.0")
-        port = int(section.get("port", 80))
+        config = load_config()
+        section = config["http"]
+
+        host = section.get("host", "127.0.0.1")
+        port = section.getint("port")
 
         aiohttp.web.run_app(self, host=host, port=port)
 
