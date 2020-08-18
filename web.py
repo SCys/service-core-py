@@ -29,9 +29,6 @@ def _custom_json_dump(obj):
 
 
 class BasicHandler(aiohttp.web.View):
-
-    request: aiohttp.web.Request
-
     def i(self, *args, **kwargs):
         self.request.i(*args, **kwargs)
 

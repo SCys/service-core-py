@@ -4,6 +4,7 @@ from .serial import BasicFields, DumpMethod, HasInfoField
 
 from .web import (
     Application,
+    BasicHandler,
     ErrorBasic,
     InvalidParams,
     KeyConflict,
