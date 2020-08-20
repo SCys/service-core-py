@@ -1,7 +1,7 @@
 # copy from https://github.com/lionsoul2014/ip2region/blob/master/binding/python/ip2Region.py
 from utils.ip2region import Ip2Region
 
-from .config import logger_app as logger
+from .logging import logger_app as logger
 
 ip2region = None
 

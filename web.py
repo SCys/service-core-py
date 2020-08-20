@@ -2,7 +2,7 @@ import asyncio
 import configparser
 import sys
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 import aiohttp.web
 import asyncpg.pool
@@ -29,6 +29,9 @@ def _custom_json_dump(obj):
 
 
 class BasicHandler(aiohttp.web.View):
+
+    user: Any = None
+
     def i(self, *args, **kwargs):
         self.request.i(*args, **kwargs)
 
