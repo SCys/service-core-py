@@ -1,6 +1,9 @@
+import os
 from configparser import ConfigParser
 from datetime import datetime, timezone
 from typing import Optional
+
+CONFIG_FILE = "./main.ini"
 
 config: Optional[ConfigParser] = None
 
@@ -26,9 +29,11 @@ def load_config() -> ConfigParser:
 
         config["database"] = {"dsn": "", "db_size": 50}
 
-        try:
-            config.read_file("./main.ini")
-        except Exception as e:
-            print(f"read main.ini error:{e}")
+        if os.path.isfile(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as fobj:
+                try:
+                    config.read_file(fobj)
+                except Exception as e:
+                    print(f"read main.ini error:{e}")
 
     return config
