@@ -1,7 +1,14 @@
-from loguru import logger
+from loguru import logger, Logger
 
 __all__ = []
+
+logger_app: Logger
+logger_info: Logger
+logger_access: Logger
+logger_debug: Logger
+
 names = globals()
+
 
 for name, name_long, limit_size, limit_retention in [
     ["app", "application", "10 MB", "3 months"],
