@@ -26,6 +26,9 @@ class BasicFields:
 
 
 class HasInfoField:
+
+    info: Dict
+
     def __post_init__(self):
         if isinstance(self.info, str):
             self.info = loads(self.info)

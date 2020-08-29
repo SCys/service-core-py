@@ -1,31 +1,49 @@
-from loguru import logger, Logger
-
-__all__ = []
-
-logger_app: Logger
-logger_info: Logger
-logger_access: Logger
-logger_debug: Logger
-
-names = globals()
+from loguru import logger
 
 
-for name, name_long, limit_size, limit_retention in [
-    ["app", "application", "10 MB", "3 months"],
-    ["info", "info", "20 MB", "12 months"],
-    ["access", "access", "50 MB", "12 months"],
-    ["debug", "debug", "50 MB", "1 months"],
-]:
-    logger.add(
-        f"log/{name_long}.log",
-        rotation=limit_size,
-        retention=limit_retention,
-        compression="gz",
-        delay=True,
-        buffering=1024,
-        filter=lambda r: f"is_{name_long}" in r["extra"],
-    )
-    names[f"logger_{name}"] = logger.bind(**{f"is_{name_long}": True})
-    __all__.append(f"logger_{name}")
-    print(f"setup logger_{name} as {name_long}")
+logger.add(
+    "log/application.log",
+    rotation="10 MB",
+    retention="3 months",
+    compression="gz",
+    delay=True,
+    buffering=1024,
+    filter=lambda r: "is_application" in r["extra"],
+)
+logger_app = logger.bind(is_application=True)
 
+
+logger.add(
+    "log/info.log",
+    rotation="20 MB",
+    retention="12 months",
+    compression="gz",
+    delay=True,
+    buffering=1024,
+    filter=lambda r: "is_info" in r["extra"],
+)
+logger_info = logger.bind(is_info=True)
+
+
+logger.add(
+    "log/access.log",
+    rotation="50 MB",
+    retention="12 months",
+    compression="gz",
+    delay=True,
+    buffering=1024,
+    filter=lambda r: "is_access" in r["extra"],
+)
+logger_access = logger.bind(is_access=True)
+
+
+logger.add(
+    "log/debug.log",
+    rotation="50 MB",
+    retention="1 months",
+    compression="gz",
+    delay=True,
+    buffering=1024,
+    filter=lambda r: "is_debug" in r["extra"],
+)
+logger_debug = logger.bind(is_debug=True)
