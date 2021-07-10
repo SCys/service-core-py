@@ -1,10 +1,12 @@
 import asyncio
+import time
 import configparser
+import signal
 import sys
 from decimal import Decimal
 from typing import Any, Optional
 
-import aiohttp.web
+from aiohttp import web
 import asyncpg.pool
 import orjson as json
 from asyncpg import create_pool
@@ -13,6 +15,7 @@ from . import ipgeo
 from .config import load_config
 from .log import logger_access
 from .log import logger_app as logger
+from .utils import setup_autoreload
 
 if sys.platform != "win32":
     # import uvloop not on win32 platform
@@ -32,7 +35,7 @@ def _custom_json_dump(obj):
         return float(obj)
 
 
-class BasicHandler(aiohttp.web.View):
+class BasicHandler(web.View):
 
     user: Any = None
 
@@ -62,6 +65,10 @@ class BasicHandler(aiohttp.web.View):
     @property
     def params(self) -> dict:
         return self.request.params
+
+    @property
+    def config(self) -> configparser.ConfigParser:
+        return self.request.app.config
 
 
 class ErrorBasic(Exception):
@@ -126,10 +133,14 @@ def get_info(request):
 
 
 def a(request, exception=None):
+    remote = request.remote
+    url = request.url
+
     if exception is None:
-        logger_access.info("%s - %s 200 -", request.remote, request.url)
-    else:
-        logger_access.info("%s - %s 200 - %d %s", request.remote, request.url, exception.code, exception.error)
+        logger_access.info(f"{remote} - {url}")
+        return
+
+    logger_access.info(f"{remote} - {url} - {exception.code}:{exception.error}")
 
 
 def w(msg, *args, **kwargs):
@@ -152,8 +163,8 @@ def d(msg, *args, **kwargs):
     logger.debug("%s" % (msg), *args, **kwargs)
 
 
-@aiohttp.web.middleware
-async def middleware_default(request: aiohttp.web.Request, handler):
+@web.middleware
+async def middleware_default(request: web.Request, handler):
     # get X-Forwarded-For
     request = request.clone(remote=request.headers.get("X-Forwarded-For", request.remote))
 
@@ -182,37 +193,36 @@ async def middleware_default(request: aiohttp.web.Request, handler):
     request.data = data
     request.params = params
 
-    # parse ipgeo
-
     # run handler and handle the exception
     try:
-        trunk = await handler(request)
-        if isinstance(trunk, dict):
-            response = aiohttp.web.Response(
-                body=json.dumps(trunk, default=_custom_json_dump),
+        resp = await handler(request)
+        if isinstance(resp, dict):
+            resp = web.Response(
+                body=json.dumps(resp, default=_custom_json_dump),
                 status=200,
                 content_type="application/json",
             )
 
-        elif isinstance(trunk, str):
-            response = aiohttp.web.Response(text=trunk, status=200)
+        elif isinstance(resp, str):
+            resp = web.Response(text=resp, status=200)
 
         else:
-            response = trunk
+            resp = resp
 
     except ErrorBasic as exc:
         a(request, exc)
-        response = aiohttp.web.Response(
+        resp = web.Response(
             body=json.dumps({"code": exc.code, "error": exc.error}, default=_custom_json_dump),
             status=200,
             content_type="application/json",
         )
     else:
         a(request)
-    return response
+
+    return resp
 
 
-class Application(aiohttp.web.Application):
+class Application(web.Application):
     db: Optional[asyncpg.pool.Pool] = None
     config: configparser.ConfigParser
 
@@ -221,10 +231,16 @@ class Application(aiohttp.web.Application):
 
         self.config = load_config()
 
-        kwargs["client_max_size"] = 1024 * 1024 * 512  # 512M
+        if "client_max_size" not in kwargs:
+            kwargs["client_max_size"] = 1024 * 1024 * 64  # 64M
+
+        if "loop" not in kwargs:
+            kwargs["loop"] = asyncio.get_event_loop()
+
         super().__init__(**kwargs)
 
         self.middlewares.append(middleware_default)
+        self.on_startup.append(self.setup)
 
         self.logger = logger
 
@@ -243,6 +259,8 @@ class Application(aiohttp.web.Application):
                 logger.error("invalid route:%s", route)
                 raise InvalidParams(400, "invalid route")
 
+        self.loop.add_signal_handler(signal.SIGUSR1, self.reload)
+
         logger.info(f"application initialized")
 
     def start(self):
@@ -255,7 +273,10 @@ class Application(aiohttp.web.Application):
         host = section.get("host", "127.0.0.1")
         port = section.getint("port", 8080)
 
-        aiohttp.web.run_app(self, host=host, port=port)
+        web.run_app(self, host=host, port=port)
+
+    def reload(self):
+        self.config = load_config()
 
     @staticmethod
     async def setup(app):
@@ -263,11 +284,8 @@ class Application(aiohttp.web.Application):
         section = config["database"]
 
         # setup database connection
-        db_dsn = section.get("dsn")
-        if db_dsn:
-            db_size = section.getint("db_size")
-            app.db = await create_pool(
-                dsn=db_dsn, min_size=1, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
-            )
+        if "dsn" in section:
+            db_dsn = section.get("dsn")
+            app.db = await create_pool(dsn=db_dsn, min_size=1, command_timeout=5.0, max_inactive_connection_lifetime=600)
 
         await ipgeo.load()
