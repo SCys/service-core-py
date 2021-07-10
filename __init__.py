@@ -1,7 +1,6 @@
 from .config import load_config
-from .logging import *
+from .log import *
 from .serial import BasicFields, DumpMethod, HasInfoField
-
 from .web import (
     Application,
     BasicHandler,

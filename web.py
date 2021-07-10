@@ -11,13 +11,17 @@ from asyncpg import create_pool
 
 from . import ipgeo
 from .config import load_config
-from .logging import logger_access
-from .logging import logger_app as logger
+from .log import logger_access
+from .log import logger_app as logger
 
 if sys.platform != "win32":
-    import uvloop
+    # import uvloop not on win32 platform
+    try:
+        import uvloop
 
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    except ImportError:
+        pass
 
 
 def _custom_json_dump(obj):
@@ -185,7 +189,9 @@ async def middleware_default(request: aiohttp.web.Request, handler):
         trunk = await handler(request)
         if isinstance(trunk, dict):
             response = aiohttp.web.Response(
-                body=json.dumps(trunk, default=_custom_json_dump), status=200, content_type="application/json",
+                body=json.dumps(trunk, default=_custom_json_dump),
+                status=200,
+                content_type="application/json",
             )
 
         elif isinstance(trunk, str):
@@ -266,4 +272,4 @@ class Application(aiohttp.web.Application):
                 dsn=db_dsn, min_size=1, max_size=db_size, command_timeout=5.0, max_inactive_connection_lifetime=600
             )
 
-        await ipgeo.ip2region_update()
+        await ipgeo.load()

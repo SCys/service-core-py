@@ -1,12 +1,12 @@
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from asyncpg import Connection
 from orjson import loads
 from xid import Xid
 
-from core.web import InvalidParams, ObjectNotFound
+from .web import InvalidParams, ObjectNotFound
 
 
 def _get_table(cls):
