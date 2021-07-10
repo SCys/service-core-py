@@ -1,8 +1,5 @@
 import math
 import os
-import asyncio
-
-from watchdog import observers
 
 
 def pretty_size(size_bytes):

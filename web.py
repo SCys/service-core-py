@@ -7,13 +7,14 @@ from decimal import Decimal
 from typing import Any, Optional
 
 from aiohttp import web
+from asyncpg.exceptions import ConnectionRejectionError
 import asyncpg.pool
 import orjson as json
 from asyncpg import create_pool
 
 from . import ipgeo
 from .config import load_config
-from .log import logger_access
+from .log import logger_access, logger_debug
 from .log import logger_app as logger
 from .utils import setup_autoreload
 
@@ -160,7 +161,7 @@ def i(msg, *args, **kwargs):
 
 def d(msg, *args, **kwargs):
     # logger.debug("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    logger.debug("%s" % (msg), *args, **kwargs)
+    logger_debug.debug("%s" % (msg), *args, **kwargs)
 
 
 @web.middleware
@@ -286,6 +287,10 @@ class Application(web.Application):
         # setup database connection
         if "dsn" in section:
             db_dsn = section.get("dsn")
-            app.db = await create_pool(dsn=db_dsn, min_size=1, command_timeout=5.0, max_inactive_connection_lifetime=600)
+            try:
+                app.db = await create_pool(dsn=db_dsn, min_size=1, command_timeout=5.0, max_inactive_connection_lifetime=600)
+            except ConnectionRefusedError as e:
+                logger.error(f"database connect failed:{e}")
+                pass
 
         await ipgeo.load()

@@ -1,4 +1,5 @@
 from loguru import logger
+import logging
 
 
 logger.add(
@@ -9,6 +10,7 @@ logger.add(
     delay=True,
     buffering=1024,
     filter=lambda r: "is_application" in r["extra"],
+    level=logging.INFO,
 )
 logger_app = logger.bind(is_application=True)
 
@@ -21,6 +23,7 @@ logger.add(
     delay=True,
     buffering=1024,
     filter=lambda r: "is_info" in r["extra"],
+    level=logging.INFO,
 )
 logger_info = logger.bind(is_info=True)
 
@@ -45,5 +48,6 @@ logger.add(
     delay=True,
     buffering=1024,
     filter=lambda r: "is_debug" in r["extra"],
+    level=logging.DEBUG,
 )
 logger_debug = logger.bind(is_debug=True)
