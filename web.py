@@ -253,7 +253,7 @@ class Application(aiohttp.web.Application):
         section = config["http"]
 
         host = section.get("host", "127.0.0.1")
-        port = section.getint("port")
+        port = section.getint("port", 8080)
 
         aiohttp.web.run_app(self, host=host, port=port)
 

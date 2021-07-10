@@ -1,4 +1,5 @@
 import io
+import os
 import socket
 import struct
 import sys
@@ -16,16 +17,27 @@ ip2region: Optional["Ip2Region"] = None
 
 
 async def load():
+    """加载在线数据库 data/ipgeo/ip2regionn.db"""
     global ip2region
+
+    if not os.path.isdir("data/ipgeo"):
+        os.makedirs("data/ipgeo")
 
     # download remote location database
     try:
         async with ClientSession(timeout=ClientTimeout(total=15)) as session:
             async with session.get(URL_DB) as response:
                 content = await response.read()
-                ip2region = Ip2Region(io.BytesIO(content))
+
+                with open("data/ipgeo/ip2regio.db", "wb+") as f:
+                    f.write(content)
     except Exception as e:
         logger.debug(f"download ip2region db failed:{e}")
+
+    if not os.path.isfile("data/ipgeo/ip2regio.db"):
+        return
+
+    ip2region = Ip2Region("data/ipgeo/ip2regio.db")
 
 
 def find(ip):
