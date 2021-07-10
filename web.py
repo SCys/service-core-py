@@ -213,8 +213,6 @@ async def middleware_default(request: aiohttp.web.Request, handler):
 
 
 class Application(aiohttp.web.Application):
-    __version__ = "0.2.7"
-
     db: Optional[asyncpg.pool.Pool] = None
     config: configparser.ConfigParser
 
@@ -245,7 +243,7 @@ class Application(aiohttp.web.Application):
                 logger.error("invalid route:%s", route)
                 raise InvalidParams(400, "invalid route")
 
-        logger.info(f"application({self.__version__}) initialized")
+        logger.info(f"application initialized")
 
     def start(self):
         self.middlewares.freeze()
