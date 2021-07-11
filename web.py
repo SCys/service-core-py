@@ -285,10 +285,14 @@ class Application(web.Application):
         section = config["database"]
 
         # setup database connection
-        if "dsn" in section:
-            db_dsn = section.get("dsn")
+        if "dsn" in section and section["dsn"]:
             try:
-                app.db = await create_pool(dsn=db_dsn, min_size=1, command_timeout=5.0, max_inactive_connection_lifetime=600)
+                app.db = await create_pool(
+                    dsn=section["dsn"],
+                    min_size=1,
+                    command_timeout=5.0,
+                    max_inactive_connection_lifetime=600,
+                )
             except ConnectionRefusedError as e:
                 logger.error(f"database connect failed:{e}")
                 pass

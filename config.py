@@ -27,7 +27,7 @@ def load_config() -> ConfigParser:
             "port": 8080,
         }
 
-        config["database"] = {"dsn": "", "db_size": 50}
+        config["database"] = {}
 
         if os.path.isfile(CONFIG_FILE):
             with open(CONFIG_FILE, "r") as fobj:
