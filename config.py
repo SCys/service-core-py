@@ -13,6 +13,7 @@ def load_config() -> ConfigParser:
 
     if config is None:
         config = ConfigParser()
+
         config["default"] = {
             # service start at
             "ts_start": datetime.now(timezone.utc).isoformat(),
@@ -35,5 +36,4 @@ def load_config() -> ConfigParser:
                     config.read_file(fobj)
                 except Exception as e:
                     print(f"read main.ini error:{e}")
-
     return config

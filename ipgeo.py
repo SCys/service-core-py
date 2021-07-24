@@ -9,7 +9,12 @@ from aiohttp import ClientSession, ClientTimeout
 
 from .log import logger_debug as logger
 
-URL_DB = "https://cdn.jsdelivr.net/gh/lionsoul2014/ip2region@master/data/ip2region.db"
+URLS_DB = [
+    "https://hub.fastgit.org/lionsoul2014/ip2region/raw/master/data/ip2region.db",
+    "https://cdn.jsdelivr.net/gh/lionsoul2014/ip2region@master/data/ip2region.db",
+]
+
+PATH_DB = "data/ipgeo/ip2region.db"
 
 __all__ = ["init", "update", "find"]
 
@@ -24,20 +29,24 @@ async def load():
         os.makedirs("data/ipgeo")
 
     # download remote location database
-    try:
-        async with ClientSession(timeout=ClientTimeout(total=15)) as session:
-            async with session.get(URL_DB) as response:
-                content = await response.read()
+    async with ClientSession(timeout=ClientTimeout(total=15)) as session:
+        for url in URLS_DB:
+            try:
+                async with session.get(url) as response:
+                    content = await response.read()
 
-                with open("data/ipgeo/ip2regio.db", "wb+") as f:
-                    f.write(content)
-    except Exception as e:
-        logger.debug(f"download ip2region db failed:{e}")
+                    with open(PATH_DB, "wb+") as f:
+                        f.write(content)
 
-    if not os.path.isfile("data/ipgeo/ip2regio.db"):
+                    break
+            except Exception as e:
+                logger.warning(f"download {url} failed:{e}")
+
+    if not os.path.isfile(PATH_DB):
         return
 
-    ip2region = Ip2Region("data/ipgeo/ip2regio.db")
+    ip2region = Ip2Region(PATH_DB)
+    logger.info("ip2region is setup")
 
 
 def find(ip):

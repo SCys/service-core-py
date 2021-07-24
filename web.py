@@ -241,7 +241,6 @@ class Application(web.Application):
         super().__init__(**kwargs)
 
         self.middlewares.append(middleware_default)
-        self.on_startup.append(self.setup)
 
         self.logger = logger
 
