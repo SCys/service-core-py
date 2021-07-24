@@ -6,7 +6,7 @@ from asyncpg import Connection
 from orjson import loads
 from xid import Xid
 
-from .web import InvalidParams, ObjectNotFound
+from .exception import InvalidParams, ObjectNotFound
 
 
 def _get_table(cls):
@@ -15,18 +15,17 @@ def _get_table(cls):
 
 @dataclass
 class BasicFields:
-    uuid: str = field(default_factory=lambda: Xid().string())
-    info: Dict = field(default_factory=dict)
+    id: str = field(default_factory=lambda: Xid().string())
     ts_created: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     ts_updated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     removed: bool = False
+    info: Dict = field(default_factory=dict)
 
     __table_name__ = ""
-    __table_key__ = "uuid"
+    __table_key__ = "id"
 
 
 class HasInfoField:
-
     info: Dict
 
     def __post_init__(self):
@@ -36,15 +35,15 @@ class HasInfoField:
 
 class DumpMethod:
     def dump(self):
-        return {field.name: getattr(self, field.name) for field in fields(self.__class__)}
+        return {i.name: getattr(self, i.name) for i in fields(self.__class__)}
 
 
 class GetMethod:
     @staticmethod
     async def get(db: Connection, key: str):
-        tname, tkey = _get_table(__class__)
+        table, key = _get_table(__class__)
 
-        row = await db.fetchrow(f"select * from {tname} where {tkey}=$1 and not removed", key)
+        row = await db.fetchrow(f"select * from {table} where {key}=$1 and not removed", key)
         if not row:
             raise ObjectNotFound()
 
@@ -54,18 +53,18 @@ class GetMethod:
 class FindMethod:
     @staticmethod
     async def find(db: Connection, values: dict, offset: int, limit: int, order: Optional[str] = None) -> List:
-        tname, _ = _get_table(__class__)
+        table, _ = _get_table(__class__)
 
         if order:
             o = f"order by {order}"
         else:
             o = "order by ts_created,ts_updated"
 
-        statment_filter = []
-        for key in values:
-            statment_filter.append(f"{key} = ${len(statment_filter) + 1}")
+        statement_filter = []
+        for i in values:
+            statement_filter.append(f"{i} = ${len(statement_filter) + 1}")
 
-        q = f"select * from {tname} where {'and '.join(statment_filter)} {o} offset $2 limit $3"
+        q = f"select * from {table} where {'and '.join(statement_filter)} {o} offset $2 limit $3"
         rows = await db.fetchrow(q, *values.values(), offset, limit)
         if not rows:
             raise ObjectNotFound()
@@ -76,44 +75,44 @@ class FindMethod:
 class CreateMethod:
     @staticmethod
     async def create(db: Connection, values: dict):
-        tname, tkey = _get_table(__class__)
+        table, key = _get_table(__class__)
         cls_fields = fields(__class__)
 
-        statment_keys = []
-        statment_values = []
+        statement_keys = []
+        statement_values = []
 
-        for key in values:
+        for i in values:
             # ignore unknown key
-            if key not in cls_fields:
-                raise InvalidParams(key)
+            if i not in cls_fields:
+                raise InvalidParams(i)
 
-            statment_keys.append(key)
-            statment_values.append(f"${len(statment_keys)}")
+            statement_keys.append(i)
+            statement_values.append(f"${len(statement_keys)}")
 
-        q = f"insert into {tname}({','.join(statment_keys)}) values({','.join(statment_values)}) on conflict do nothing returing {tkey}"
+        q = f"insert into {table}({','.join(statement_keys)}) values({','.join(statement_values)}) on conflict do nothing returing {key}"
         return await db.fetchval(q, *values.values())
 
 
 class UpdateMethod:
     async def update(self, db: Connection, values: dict):
-        tname, tkey = _get_table(self.__class__)
+        table, key = _get_table(self.__class__)
         cls_fields = fields(self.__class__)
 
         updated = {}
 
         async with db.transaction():
-            for key, value in values.items():
+            for k, v in values.items():
                 # ignore unknown key
-                if key not in cls_fields:
+                if k not in cls_fields:
                     continue
 
                 # ignore eq old value
-                if value == getattr(self, key):
+                if v == getattr(self, k):
                     continue
 
-                await db.execute(f"update {tname} set {key}=$2 where {tkey}=$1", key, value)
+                await db.execute(f"update {table} set {k}=$2 where {key}=$1", k, v)
 
-                setattr(self, key, value)
-                updated[key] = value
+                setattr(self, k, v)
+                updated[k] = v
 
         return updated

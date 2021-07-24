@@ -1,31 +1,26 @@
 import asyncio
-import time
+from core import exception
+from core.exception import ErrorBasic, InvalidParams
 import configparser
 import signal
-import sys
 from decimal import Decimal
 from typing import Any, Optional
 
 from aiohttp import web
-from asyncpg.exceptions import ConnectionRejectionError
 import asyncpg.pool
 import orjson as json
 from asyncpg import create_pool
 
 from . import ipgeo
 from .config import load_config
-from .log import logger_access, logger_debug
-from .log import logger_app as logger
-from .utils import setup_autoreload
+from .log import access, info, error, warning, exception, debug
 
-if sys.platform != "win32":
-    # import uvloop not on win32 platform
-    try:
-        import uvloop
+try:
+    import uvloop
 
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    except ImportError:
-        pass
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+except ImportError:
+    pass
 
 
 def _custom_json_dump(obj):
@@ -37,20 +32,13 @@ def _custom_json_dump(obj):
 
 
 class BasicHandler(web.View):
-
     user: Any = None
 
-    def i(self, *args, **kwargs):
-        self.request.i(*args, **kwargs)
-
-    def d(self, *args, **kwargs):
-        self.request.d(*args, **kwargs)
-
-    def e(self, *args, **kwargs):
-        self.request.e(*args, **kwargs)
-
-    def w(self, *args, **kwargs):
-        self.request.w(*args, **kwargs)
+    i = info
+    d = debug
+    e = error
+    w = warning
+    x = exception
 
     def get_info(self):
         return get_info(self.request)
@@ -72,59 +60,6 @@ class BasicHandler(web.View):
         return self.request.app.config
 
 
-class ErrorBasic(Exception):
-    code = 500
-    error = "unknown error"
-
-    def __init__(self, code=None, msg=None):
-        if code is not None:
-            self.code = code
-        if msg is not None:
-            self.error = msg
-
-        self.status_code = self.code
-        self.reason = self.error
-        self.log_message = None
-
-    def dump(self):
-        return {"code": self.code, "error": self.error}
-
-
-class ServerError(ErrorBasic):
-    code = 500
-    error = "server error"
-
-
-class InvalidParams(ErrorBasic):
-    code = 400
-    error = "invalid params"
-
-
-class ObjectNotFound(ErrorBasic):
-    code = 404
-    error = "object not found"
-
-
-class Unauthorized(ErrorBasic):
-    code = 401
-    error = "unauthorized"
-
-
-class KeyConflict(ErrorBasic):
-    code = 409
-    error = "key conflict"
-
-
-class NoPermission(ErrorBasic):
-    code = 403
-    error = "no permission"
-
-
-class RemoteServerError(ErrorBasic):
-    code = 502
-    error = "remote server error"
-
-
 def get_info(request):
     return {
         "remote_ip": request.remote,
@@ -133,47 +68,17 @@ def get_info(request):
     }
 
 
-def a(request, exception=None):
-    remote = request.remote
-    url = request.url
-
-    if exception is None:
-        logger_access.info(f"{remote} - {url}")
-        return
-
-    logger_access.info(f"{remote} - {url} - {exception.code}:{exception.error}")
-
-
-def w(msg, *args, **kwargs):
-    # logger.warning("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    logger.warning("%s" % (msg), *args, **kwargs)
-
-
-def e(msg, *args, **kwargs):
-    # logger.error("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    logger.error("%s" % (msg), *args, **kwargs)
-
-
-def i(msg, *args, **kwargs):
-    # logger.info("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    logger.info("%s" % (msg), *args, **kwargs)
-
-
-def d(msg, *args, **kwargs):
-    # logger.debug("[%s]%s" % (self.__class__.__name__, msg), *args, **kwargs)
-    logger_debug.debug("%s" % (msg), *args, **kwargs)
-
-
 @web.middleware
 async def middleware_default(request: web.Request, handler):
     # get X-Forwarded-For
     request = request.clone(remote=request.headers.get("X-Forwarded-For", request.remote))
 
     # loggers
-    request.w = w
-    request.e = e
-    request.i = i
-    request.d = d
+    request.i = info
+    request.e = error
+    request.w = warning
+    request.d = debug
+    request.x = exception
 
     request.get_info = lambda: get_info(request)
 
@@ -197,28 +102,30 @@ async def middleware_default(request: web.Request, handler):
     # run handler and handle the exception
     try:
         resp = await handler(request)
-        if isinstance(resp, dict):
-            resp = web.Response(
-                body=json.dumps(resp, default=_custom_json_dump),
-                status=200,
-                content_type="application/json",
-            )
-
-        elif isinstance(resp, str):
-            resp = web.Response(text=resp, status=200)
-
-        else:
-            resp = resp
-
     except ErrorBasic as exc:
-        a(request, exc)
-        resp = web.Response(
-            body=json.dumps({"code": exc.code, "error": exc.error}, default=_custom_json_dump),
-            status=200,
-            content_type="application/json",
-        )
+        error(f"global logic error handle:{str(exc)}")
+
+        access(request, exc)
+        resp = web.Response(body=exc.dump(), status=200, content_type="application/json")
+    except Exception as exc:
+        error(f"global unknown exception:{exc}")
+
+        access(request, exc)
+        resp = web.Response(body=json.dumps({"code": 500, "error": str(exc)}), status=200,
+                            content_type="application/json")
     else:
-        a(request)
+        access(request)
+
+    if isinstance(resp, dict):
+        resp = web.Response(body=json.dumps(resp, default=_custom_json_dump), status=200,
+                            content_type="application/json")
+
+    elif isinstance(resp, str):
+        resp = web.Response(text=resp, status=200)
+
+    elif isinstance(resp, ErrorBasic):
+        exc = resp
+        resp = web.Response(body=exc.dump(), status=200, content_type="application/json")
 
     return resp
 
@@ -242,26 +149,24 @@ class Application(web.Application):
 
         self.middlewares.append(middleware_default)
 
-        self.logger = logger
-
         for route in routes:
             key = route[0]
             if key in ["post", "get", "delete", "put", "option", "head"]:
                 method = getattr(self.router, "add_%s" % route[0])
                 method(route[1], route[2])
-                logger.info(f"add route {route[0]} {route[1]} {route[2]}")
+                info(f"add route {route[0]} {route[1]} {route[2]}")
 
             elif len(route) == 2:
                 self.router.add_view(route[0], route[1])
-                logger.info(f"add view {route[0]} {route[1]}")
+                info(f"add view {route[0]} {route[1]}")
 
             else:
-                logger.error("invalid route:%s", route)
+                error("invalid route:%s", route)
                 raise InvalidParams(400, "invalid route")
 
         self.loop.add_signal_handler(signal.SIGUSR1, self.reload)
 
-        logger.info(f"application initialized")
+        info(f"application initialized")
 
     def start(self):
         self.middlewares.freeze()
@@ -284,16 +189,26 @@ class Application(web.Application):
         section = config["database"]
 
         # setup database connection
-        if "dsn" in section and section["dsn"]:
+        if "postgresql" in section:
+            dsn = section["postgresql"]
             try:
+                async def conn_init(con):
+                    await con.set_type_codec(
+                        "jsonb",
+                        schema="pg_catalog",
+                        encoder=lambda x: json.dumps(x).decode(),
+                        decoder=lambda x: json.loads(x),
+                    )
+
                 app.db = await create_pool(
-                    dsn=section["dsn"],
+                    dsn=dsn,
                     min_size=1,
+                    init=conn_init,
                     command_timeout=5.0,
                     max_inactive_connection_lifetime=600,
                 )
-            except ConnectionRefusedError as e:
-                logger.error(f"database connect failed:{e}")
-                pass
+
+            except ConnectionRefusedError:
+                exception(f"database pool create failed")
 
         await ipgeo.load()
