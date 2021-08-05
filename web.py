@@ -125,7 +125,7 @@ async def middleware_default(request: web.Request, handler):
 
     elif isinstance(resp, ErrorBasic):
         exc = resp
-        resp = web.Response(body=exc.dump(), status=200, content_type="application/json")
+        resp = web.Response(body=exc.dumps(), status=200, content_type="application/json")
 
     return resp
 

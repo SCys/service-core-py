@@ -1,5 +1,9 @@
 import math
 import os
+from typing import Optional
+
+from aiofile import async_open
+from aiohttp import ClientSession, ClientTimeout
 
 
 def pretty_size(size_bytes):
@@ -56,3 +60,31 @@ def setup_autoreload(app):
         observer.start()
     except ImportError:
         pass
+
+
+async def download(url: str, headers: dict = None, timeout: int = 10) -> bytes:
+    """
+    download content and return bytes
+    """
+
+    async with ClientSession(headers=headers, timeout=ClientTimeout(total=timeout)) as session:
+        async with session.get(url) as resp:
+            return await resp.read()
+
+
+async def download_to_path(url: str, path: str, headers: dict = None, timeout: int = 10, limit: Optional[int] = None) -> bytes:
+    """
+    download content and return bytes
+    """
+    size = 0
+
+    async with ClientSession(headers=headers, timeout=ClientTimeout(timeout)) as session:
+        async with session.get(url) as resp:
+            async with async_open(path, "wb+") as f:
+                async for data in resp.content.iter_chunked(2 << 19):  # 1mb
+                    size += len(data)
+
+                    if limit is not None and size > limit:
+                        raise ValueError(f"content size is too big: {pretty_size(size)}")
+
+                    await f.write(data)

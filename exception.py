@@ -1,3 +1,6 @@
+import orjson as json
+
+
 class ErrorBasic(Exception):
     code = 500
     error = "unknown error"
@@ -14,6 +17,9 @@ class ErrorBasic(Exception):
 
     def dump(self):
         return {"code": self.code, "error": self.error}
+
+    def dumps(self):
+        return json.dumps(self.dump())
 
 
 class ServerError(ErrorBasic):
