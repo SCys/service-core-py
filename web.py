@@ -178,7 +178,7 @@ class Application(web.Application):
         host = section.get("host", "127.0.0.1")
         port = section.getint("port", 8080)
 
-        web.run_app(self, host=host, port=port)
+        web.run_app(self, host=host, port=port, loop=self.loop)
 
     def reload(self):
         self.config = load_config()
