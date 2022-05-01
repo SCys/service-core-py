@@ -111,14 +111,12 @@ async def middleware_default(request: web.Request, handler):
         error(f"global unknown exception:{exc}")
 
         access(request, exc)
-        resp = web.Response(body=json.dumps({"code": 500, "error": str(exc)}), status=200,
-                            content_type="application/json")
+        resp = web.Response(body=json.dumps({"code": 500, "error": str(exc)}), status=200, content_type="application/json")
     else:
         access(request)
 
     if isinstance(resp, dict):
-        resp = web.Response(body=json.dumps(resp, default=_custom_json_dump), status=200,
-                            content_type="application/json")
+        resp = web.Response(body=json.dumps(resp, default=_custom_json_dump), status=200, content_type="application/json")
 
     elif isinstance(resp, str):
         resp = web.Response(text=resp, status=200)
@@ -192,6 +190,7 @@ class Application(web.Application):
         if "postgresql" in section:
             dsn = section["postgresql"]
             try:
+
                 async def conn_init(con):
                     await con.set_type_codec(
                         "jsonb",

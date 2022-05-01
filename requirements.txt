@@ -1,4 +1,5 @@
 aiohttp
+aiofile
 orjson
 loguru
 python3-xid

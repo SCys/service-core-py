@@ -9,7 +9,7 @@ from .log import logger_debug as logger
 from .utils import download
 
 URLS_DB = [
-    "https://hub.fastgit.org/lionsoul2014/ip2region/raw/master/data/ip2region.db",
+    "https://github.com/lionsoul2014/ip2region/raw/master/data/ip2region.db",
     "https://cdn.jsdelivr.net/gh/lionsoul2014/ip2region@master/data/ip2region.db",
 ]
 
