@@ -1,19 +1,16 @@
 import asyncio
-from core import exception
-from core.exception import ErrorBasic, InvalidParams
 import configparser
 import signal
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Optional, Dict, Callable
 
-from aiohttp import web
 import asyncpg.pool
 import orjson as json
-from asyncpg import create_pool
+from aiohttp import web
+import asyncpg
 
-from . import ipgeo
-from .config import load_config
-from .log import access, info, error, warning, exception, debug
+from . import ipgeo, config, log
+from .exception import ErrorBasic, InvalidParams
 
 try:
     import uvloop
@@ -31,14 +28,30 @@ def _custom_json_dump(obj):
         return float(obj)
 
 
+class CustomRequest(web.Request):
+    db: Optional[asyncpg.pool.Pool]
+    data: Dict
+    params: Dict
+
+    i: Callable = log.info
+    e: Callable = log.error
+    w: Callable = log.warning
+    d: Callable = log.debug
+    x: Callable = log.exception
+
+    get_info: Callable
+
+
 class BasicHandler(web.View):
     user: Any = None
 
-    i = info
-    d = debug
-    e = error
-    w = warning
-    x = exception
+    i = log.info
+    d = log.debug
+    e = log.error
+    w = log.warning
+    x = log.exception
+
+    request: CustomRequest
 
     def get_info(self):
         return get_info(self.request)
@@ -57,33 +70,28 @@ class BasicHandler(web.View):
 
     @property
     def config(self) -> configparser.ConfigParser:
-        return self.request.app.config
+        app: "Application" = self.request.app
+        return app.config
 
 
 def get_info(request):
     return {
         "remote_ip": request.remote,
         "user_agent": request.headers.get("User-Agent"),
-        "referrer": request.headers.get("Referer"),
+        "referrer": request.headers.get("Referrer"),
     }
 
 
 @web.middleware
 async def middleware_default(request: web.Request, handler):
     # get X-Forwarded-For
-    request = request.clone(remote=request.headers.get("X-Forwarded-For", request.remote))
-
-    # loggers
-    request.i = info
-    request.e = error
-    request.w = warning
-    request.d = debug
-    request.x = exception
+    request: CustomRequest = request.clone(remote=request.headers.get("X-Forwarded-For", request.remote))
+    app: "Application" = request.app
 
     request.get_info = lambda: get_info(request)
 
     # inspect
-    request.db = request.app.db
+    request.db = app.db
 
     # parse json
     data: dict = {}
@@ -103,17 +111,17 @@ async def middleware_default(request: web.Request, handler):
     try:
         resp = await handler(request)
     except ErrorBasic as exc:
-        error(f"global logic error handle:{str(exc)}")
+        log.error(f"global logic error handle:{str(exc)}")
 
-        access(request, exc)
+        log.access(request, exc)
         resp = web.Response(body=exc.dump(), status=200, content_type="application/json")
     except Exception as exc:
-        error(f"global unknown exception:{exc}")
+        log.error(f"global unknown exception:{exc}")
 
-        access(request, exc)
+        log.access(request, exc)
         resp = web.Response(body=json.dumps({"code": 500, "error": str(exc)}), status=200, content_type="application/json")
     else:
-        access(request)
+        log.access(request)
 
     if isinstance(resp, dict):
         resp = web.Response(body=json.dumps(resp, default=_custom_json_dump), status=200, content_type="application/json")
@@ -129,13 +137,12 @@ async def middleware_default(request: web.Request, handler):
 
 
 class Application(web.Application):
-    db: Optional[asyncpg.pool.Pool] = None
+    db: Optional[asyncpg.pool.Pool]
     config: configparser.ConfigParser
 
     def __init__(self, routes, **kwargs):
         self.db = None
-
-        self.config = load_config()
+        self.config = config.load()
 
         if "client_max_size" not in kwargs:
             kwargs["client_max_size"] = 1024 * 1024 * 64  # 64M
@@ -152,41 +159,38 @@ class Application(web.Application):
             if key in ["post", "get", "delete", "put", "option", "head"]:
                 method = getattr(self.router, "add_%s" % route[0])
                 method(route[1], route[2])
-                info(f"add route {route[0]} {route[1]} {route[2]}")
+                log.info(f"add route {route[0]} {route[1]} {route[2]}")
 
             elif len(route) == 2:
                 self.router.add_view(route[0], route[1])
-                info(f"add view {route[0]} {route[1]}")
+                log.info(f"add view {route[0]} {route[1]}")
 
             else:
-                error("invalid route:%s", route)
+                log.error("invalid route:%s", route)
                 raise InvalidParams(400, "invalid route")
 
         self.loop.add_signal_handler(signal.SIGUSR1, self.reload)
 
-        info(f"application initialized")
+        log.info(f"application initialized")
 
     def start(self):
         self.middlewares.freeze()
         self.on_startup.append(self.setup)
 
-        config = load_config()
-        section = config["http"]
-
+        section = self.config.get("http")
         host = section.get("host", "127.0.0.1")
         port = section.getint("port", 8080)
 
         web.run_app(self, host=host, port=port, loop=self.loop)
 
     def reload(self):
-        self.config = load_config()
+        self.config = config.reload()
 
     @staticmethod
-    async def setup(app):
-        config = load_config()
-        section = config["database"]
+    async def setup(app: "Application"):
+        section = app.config["database"]
 
-        # setup database connection
+        # setup postgresql connections
         if "postgresql" in section:
             dsn = section["postgresql"]
             try:
@@ -199,7 +203,7 @@ class Application(web.Application):
                         decoder=lambda x: json.loads(x),
                     )
 
-                app.db = await create_pool(
+                app.db = await asyncpg.create_pool(
                     dsn=dsn,
                     min_size=1,
                     init=conn_init,
@@ -207,7 +211,9 @@ class Application(web.Application):
                     max_inactive_connection_lifetime=600,
                 )
 
+                log.info(f"database pool created")
+
             except ConnectionRefusedError:
-                exception(f"database pool create failed")
+                log.exception(f"database pool create failed")
 
         await ipgeo.load()

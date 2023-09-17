@@ -1,39 +1,44 @@
 import os
 from configparser import ConfigParser
 from datetime import datetime, timezone
-from typing import Optional
+import aiofile
 
-CONFIG_FILE = "./main.ini"
+CONFIG_FILE = "main.ini"
 
-config: Optional[ConfigParser] = None
-
-
-def load_config() -> ConfigParser:
-    global config
-
-    if config is None:
-        config = ConfigParser()
-
-        config["default"] = {
-            # service start at
+config = ConfigParser(
+    {
+        "default": {
             "ts_start": datetime.now(timezone.utc).isoformat(),
-            # debug flag
             "debug": False,
             "autoreload": False,
-        }
-
-        config["http"] = {
-            # http listen on
+        },
+        "http": {
             "host": "127.0.0.1",
             "port": 8080,
-        }
+        },
+        "database": {},
+    }
+)
 
-        config["database"] = {}
 
-        if os.path.isfile(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as fobj:
-                try:
-                    config.read_file(fobj)
-                except Exception as e:
-                    print(f"read main.ini error:{e}")
+async def load() -> ConfigParser:
+    global config
+
+    if not os.path.isfile(CONFIG_FILE):
+        return config
+
+    async with aiofile.async_open(CONFIG_FILE, "r") as f:
+        try:
+            await config.read_file(f)
+        except Exception as e:
+            print(f"read main.ini error:{e}")
+
     return config
+
+
+def reload() -> ConfigParser:
+    global config
+
+    config.clear()
+
+    return load()
