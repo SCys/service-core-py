@@ -2,14 +2,15 @@ import asyncio
 import configparser
 import signal
 from decimal import Decimal
-from typing import Any, Optional, Dict, Callable
+from typing import Any, Callable, Dict, Optional
 
+import asyncpg
 import asyncpg.pool
 import orjson as json
+import sqlalchemy.ext.asyncio
 from aiohttp import web
-import asyncpg
 
-from . import ipgeo, config, log
+from . import config, ipgeo, log
 from .exception import ErrorBasic, InvalidParams
 
 try:
@@ -29,7 +30,7 @@ def _custom_json_dump(obj):
 
 
 class CustomRequest(web.Request):
-    db: Optional[asyncpg.pool.Pool]
+    db: Optional[asyncpg.pool.Pool | sqlalchemy.ext.asyncio.AsyncSession]
     data: Dict
     params: Dict
 
@@ -137,7 +138,7 @@ async def middleware_default(request: web.Request, handler):
 
 
 class Application(web.Application):
-    db: Optional[asyncpg.pool.Pool]
+    db: Optional[asyncpg.pool.Pool | sqlalchemy.ext.asyncio.AsyncSession]
     config: configparser.ConfigParser
 
     def __init__(self, routes, **kwargs):
@@ -189,6 +190,7 @@ class Application(web.Application):
     @staticmethod
     async def setup(app: "Application"):
         section = app.config["database"]
+        debug = app.config.getboolean("default", "debug", fallback=False)
 
         # setup postgresql connections
         if "postgresql" in section:
@@ -211,9 +213,18 @@ class Application(web.Application):
                     max_inactive_connection_lifetime=600,
                 )
 
-                log.info(f"database pool created")
+                log.info(f"postgresql pool created")
 
             except ConnectionRefusedError:
-                log.exception(f"database pool create failed")
+                log.exception(f"postgresql pool create failed")
+
+        if "sqlalchemy" in section:
+            from sqlalchemy.ext.asyncio import create_async_engine
+            from sqlalchemy.orm import sessionmaker
+
+            engine = await create_async_engine(section["sqlalchemy"], echo=debug)
+            app.db = sessionmaker(bind=engine)
+
+            log.info(f"sqlalchemy pool created")
 
         await ipgeo.load()

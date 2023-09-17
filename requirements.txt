@@ -3,5 +3,8 @@ aiofile
 orjson
 loguru
 python3-xid
-asyncpg
 uvloop
+
+# database
+asyncpg
+sqlalchemy[asyncio]
