@@ -8,7 +8,8 @@ import asyncpg
 import asyncpg.pool
 import orjson as json
 import sqlalchemy.ext.asyncio
-from aiohttp import web
+from aiohttp import web, typedefs
+import orjson
 
 from . import config, ipgeo, log
 from .exception import ErrorBasic, InvalidParams
@@ -19,6 +20,9 @@ try:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 except ImportError:
     pass
+
+typedefs.DEFAULT_JSON_ENCODER = orjson.dumps
+typedefs.DEFAULT_JSON_DECODER = orjson.loads
 
 
 def _custom_json_dump(obj):
@@ -58,15 +62,15 @@ class BasicHandler(web.View):
         return get_info(self.request)
 
     @property
-    def db(self) -> Optional[asyncpg.pool.Pool]:
+    def db(self) -> Optional[asyncpg.pool.Pool | sqlalchemy.ext.asyncio.AsyncSession]:
         return self.request.db
 
     @property
-    def data(self) -> dict:
+    def data(self) -> Dict:
         return self.request.data
 
     @property
-    def params(self) -> dict:
+    def params(self) -> Dict:
         return self.request.params
 
     @property
@@ -95,8 +99,8 @@ async def middleware_default(request: web.Request, handler):
     request.db = app.db
 
     # parse json
-    data: dict = {}
-    params: dict = {}
+    data: Dict = {}
+    params: Dict = {}
     if request.body_exists and ("application/json" in request.content_type or "text/plain" in request.content_type):
         content = await request.text()
         if content:
