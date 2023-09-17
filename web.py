@@ -180,7 +180,7 @@ class Application(web.Application):
 
     def start(self):
         self.middlewares.freeze()
-        self.on_startup.append(self.setup)
+        self.on_startup.append(self.setUp)
 
         section = self.config.get("http")
         host = section.get("host", "127.0.0.1")
@@ -192,7 +192,7 @@ class Application(web.Application):
         self.config = config.reload()
 
     @staticmethod
-    async def setup(app: "Application"):
+    async def setUp(app: "Application"):
         section = app.config["database"]
         debug = app.config.getboolean("default", "debug", fallback=False)
 
@@ -229,6 +229,25 @@ class Application(web.Application):
             engine = await create_async_engine(section["sqlalchemy"], echo=debug)
             app.db = sessionmaker(bind=engine)
 
+            app.on_shutdown.append()
+
             log.info(f"sqlalchemy pool created")
 
         await ipgeo.load()
+
+    @staticmethod
+    async def tearDown(app: "Application"):
+        if app.db:
+            section = app.config["database"]
+            db = app.db
+
+            # db is asyncpg pool
+            if "postgresql" in section:
+                await db.close()
+                log.info(f"postgresql pool closed")
+
+            # db is sqlalchemy session
+            if "sqlalchemy" in section:
+                await db.dispose()
+
+                log.info(f"sqlalchemy pool closed")
