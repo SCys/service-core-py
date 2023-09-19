@@ -46,6 +46,11 @@ class CustomRequest(web.Request):
 
     get_info: Callable
 
+    # addition attributes
+    is_login = False
+    user: Any = None
+    token: Any = None
+
 
 class BasicHandler(web.View):
     user: Any = None
